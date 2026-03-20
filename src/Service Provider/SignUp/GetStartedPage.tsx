@@ -1,9 +1,17 @@
 import { useState } from "react";
-import { Mail, Lock, User } from "lucide-react";
+import { Mail, Lock } from "lucide-react";
 import Img from "../../assets/Backgrounds/Signupscreens.jpg";
 
+interface FormData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}
+
 const GetStartedPage = () => {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     firstName: "",
     lastName: "",
     email: "",
@@ -11,25 +19,25 @@ const GetStartedPage = () => {
     confirmPassword: ""
   });
 
-  const [errors, setErrors] = useState({});
-  const [touched, setTouched] = useState({});
+  const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
+  const [touched, setTouched] = useState<Partial<Record<keyof FormData, boolean>>>({})
   const [loading, setLoading] = useState(false);
 
-  const handleChange = (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    setFormData({ ...formData, [name as keyof FormData]: value });
     // Clear error when user starts typing
-    if (errors[name]) {
-      setErrors({ ...errors, [name]: "" });
+    if (errors[name as keyof FormData]) {
+      setErrors({ ...errors, [name as keyof FormData]: "" });
     }
   };
 
-  const handleBlur = (e) => {
-    setTouched({ ...touched, [e.target.name]: true });
+  const handleBlur = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTouched({ ...touched, [e.target.name as keyof FormData]: true });
   };
 
   const validate = () => {
-    let newErrors = {};
+    let newErrors: Partial<Record<keyof FormData, string>> = {};
 
     if (!formData.firstName.trim()) newErrors.firstName = "Required";
     if (!formData.lastName.trim()) newErrors.lastName = "Required";
@@ -55,14 +63,14 @@ const GetStartedPage = () => {
     return newErrors;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const validationErrors = validate();
     setErrors(validationErrors);
 
     // Mark all fields as touched to show errors
-    const allTouched = Object.keys(formData).reduce((acc, key) => {
-      acc[key] = true;
+    const allTouched = Object.keys(formData).reduce((acc: Partial<Record<keyof FormData, boolean>>, key) => {
+      acc[key as keyof FormData] = true;
       return acc;
     }, {});
     setTouched(allTouched);
@@ -77,7 +85,7 @@ const GetStartedPage = () => {
     }
   };
 
-  const getInputClass = (name) => {
+  const getInputClass = (name: keyof FormData) => {
     const baseClass =
       "w-full mt-2 p-3 rounded-2xl border-2 transition-all focus:outline-none ";
     const errorClass =

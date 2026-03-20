@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Search, SlidersHorizontal, ChevronDown, X } from "lucide-react";
 
 // Make sure these paths match your actual project structure
@@ -68,17 +68,19 @@ const HomePage = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   // Filter Data States
-  const [selectedServices, setSelectedServices] = useState(["Plumbing"]);
+  const [selectedServices, setSelectedServices] = useState<string[]>([
+    "Plumbing"
+  ]);
   const [priceMin, setPriceMin] = useState("1500");
   const [priceMax, setPriceMax] = useState("100000");
-  const [emergencyService, setEmergencyService] = useState(null); // 'Yes' or 'No'
+  const [emergencyService, setEmergencyService] = useState<string | null>(null); // 'Yes' or 'No'
 
   // New Location States
-  const [selectedProvinces, setSelectedProvinces] = useState([]);
-  const [selectedDistricts, setSelectedDistricts] = useState([]);
+  const [selectedProvinces, setSelectedProvinces] = useState<string[]>([]);
+  const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
 
   // Toggles for checkboxes
-  const toggleService = (service) => {
+  const toggleService = (service: string) => {
     if (selectedServices.includes(service)) {
       setSelectedServices(selectedServices.filter((s) => s !== service));
     }
@@ -87,7 +89,7 @@ const HomePage = () => {
     }
   };
 
-  const toggleProvince = (province) => {
+  const toggleProvince = (province: string) => {
     if (selectedProvinces.includes(province)) {
       setSelectedProvinces(selectedProvinces.filter((p) => p !== province));
     }
@@ -96,7 +98,7 @@ const HomePage = () => {
     }
   };
 
-  const toggleDistrict = (district) => {
+  const toggleDistrict = (district: string) => {
     if (selectedDistricts.includes(district)) {
       setSelectedDistricts(selectedDistricts.filter((d) => d !== district));
     }

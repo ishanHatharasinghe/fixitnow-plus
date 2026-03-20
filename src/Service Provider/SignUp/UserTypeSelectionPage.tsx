@@ -10,12 +10,12 @@ const UserTypeSelectionPage = () => {
   const [selectedType, setSelectedType] = useState(formData.userType || "");
   const [error, setError] = useState("");
 
-  const handleTypeSelect = (type) => {
+  const handleTypeSelect = (type: string) => {
     setSelectedType(type);
     setError("");
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedType) {
       setError("Please select a user type to continue");
@@ -191,8 +191,10 @@ const UserTypeSelectionPage = () => {
               )}
 
               <button
-                type="submit"
-                onClick={handleSubmit}
+                type="button"
+                onClick={(e: any) =>
+                  handleSubmit(e as React.FormEvent<HTMLFormElement>)
+                }
                 className="relative overflow-hidden w-full bg-[#263D5D] hover:bg-[#303435] text-white py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg group mb-4"
               >
                 <span className="relative z-10">Continue</span>

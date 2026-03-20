@@ -3,9 +3,9 @@ import { Mail } from "lucide-react";
 import Img from "../../assets/Backgrounds/loginscreen2.png";
 
 const PwdResetPage = () => {
-  const [codes, setCodes] = useState(["", "", "", "", "", ""]);
+  const [codes, setCodes] = useState<string[]>(["", "", "", "", "", ""]);
 
-  const handleChange = (i, val) => {
+  const handleChange = (i: number, val: string) => {
     if (/^\d?$/.test(val)) {
       const newCodes = [...codes];
       newCodes[i] = val;

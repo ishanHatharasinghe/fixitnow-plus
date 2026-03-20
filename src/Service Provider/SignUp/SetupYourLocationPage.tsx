@@ -380,20 +380,25 @@ const sriLankaLocations = {
 };
 
 const SetupYourLocationPage = () => {
-  const [localData, setLocalData] = useState({
+  const [localData, setLocalData] = useState<{
+    username: string;
+    country: string;
+    district: string;
+    division: string;
+    postalCode: string;
+  }>({
     username: "",
-    country: "",
+    country: "Sri Lanka",
     district: "",
     division: "",
     postalCode: ""
   });
 
-  const [errors, setErrors] = useState({});
-  const [touched, setTouched] = useState({});
-  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   const validate = () => {
-    let newErrors = {};
+    let newErrors: Record<string, string> = {};
     if (!localData.username.trim()) newErrors.username = "Username is required";
     if (!localData.country) newErrors.country = "Country is required";
     if (!localData.district) newErrors.district = "District is required";
@@ -410,13 +415,15 @@ const SetupYourLocationPage = () => {
     return newErrors;
   };
 
-  const handleChange = (e) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target;
     setLocalData({ ...localData, [name]: value });
     if (errors[name]) setErrors({ ...errors, [name]: "" });
   };
 
-  const handleCountryChange = (e) => {
+  const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setLocalData({
       ...localData,
       country: e.target.value,
@@ -426,14 +433,16 @@ const SetupYourLocationPage = () => {
     setErrors({ ...errors, country: "", district: "", division: "" });
   };
 
-  const handleDistrictChange = (e) => {
+  const handleDistrictChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setLocalData({ ...localData, district: e.target.value, division: "" });
     setErrors({ ...errors, district: "", division: "" });
   };
 
-  const handleBlur = (e) => setTouched({ ...touched, [e.target.name]: true });
+  const handleBlur = (
+    e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>
+  ) => setTouched({ ...touched, [e.target.name]: true });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const validationErrors = validate();
     setErrors(validationErrors);
@@ -442,15 +451,13 @@ const SetupYourLocationPage = () => {
     );
 
     if (Object.keys(validationErrors).length === 0) {
-      setLoading(true);
       setTimeout(() => {
-        setLoading(false);
         console.log(localData);
       }, 1500);
     }
   };
 
-  const getStyle = (name) => {
+  const getStyle = (name: string) => {
     const isError = errors[name] && touched[name];
     return `w-full mt-2 p-3 rounded-2xl border-2 transition-all focus:outline-none ${
       isError
@@ -576,7 +583,9 @@ const SetupYourLocationPage = () => {
                 <label className="text-sm font-bold">Division</label>
                 <div className="relative">
                   {localData.country === "Sri Lanka" &&
-                  sriLankaLocations[localData.district] ? (
+                  sriLankaLocations[
+                    localData.district as keyof typeof sriLankaLocations
+                  ] ? (
                     <select
                       name="division"
                       value={localData.division}
@@ -589,7 +598,9 @@ const SetupYourLocationPage = () => {
                       <option value="" disabled hidden>
                         Select Division
                       </option>
-                      {sriLankaLocations[localData.district].map((div) => (
+                      {sriLankaLocations[
+                        localData.district as keyof typeof sriLankaLocations
+                      ]?.map((div: string) => (
                         <option key={div} value={div}>
                           {div}
                         </option>

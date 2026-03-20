@@ -3,22 +3,22 @@ import { Mail, Fingerprint } from "lucide-react";
 import Img from "../../assets/Backgrounds/loginscreen.png";
 
 const ForgotPwdPage = () => {
-  const [formData, setFormData] = useState({ email: "" });
-  const [errors, setErrors] = useState({});
-  const [touched, setTouched] = useState({});
+  const [formData, setFormData] = useState<{ email: string }>({ email: "" });
+  const [errors, setErrors] = useState<{ email?: string }>({});
+  const [touched, setTouched] = useState<{ email?: boolean }>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleChange = (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, email: e.target.value });
   };
 
-  const handleBlur = (e) => {
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     setTouched({ ...touched, [e.target.name]: true });
   };
 
   const validate = () => {
-    let newErrors = {};
+    let newErrors: { email?: string } = {};
     if (!formData.email) newErrors.email = "Email is required";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
       newErrors.email = "Please enter a valid email address";

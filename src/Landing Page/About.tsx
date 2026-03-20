@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Search, ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
 
 // Images

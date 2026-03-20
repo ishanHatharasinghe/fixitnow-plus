@@ -2,34 +2,43 @@ import { useState } from "react";
 import { Lock, Eye, EyeOff } from "lucide-react"; // Added Eye icons for better UX
 import Img from "../../assets/Backgrounds/loginscreen2.png";
 
+interface FormData {
+  password: string;
+  confirmPassword: string;
+}
+
 const SetNewPwdPage = () => {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<FormData>({
     password: "",
     confirmPassword: ""
   });
 
-  const [errors, setErrors] = useState({});
-  const [touched, setTouched] = useState({});
+  const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>(
+    {}
+  );
+  const [touched, setTouched] = useState<
+    Partial<Record<keyof FormData, boolean>>
+  >({});
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleChange = (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setForm({ ...form, [name]: value });
+    setForm({ ...form, [name as keyof FormData]: value });
 
     // Clear error as user types
-    if (errors[name]) {
-      setErrors({ ...errors, [name]: "" });
+    if (errors[name as keyof FormData]) {
+      setErrors({ ...errors, [name as keyof FormData]: "" });
     }
   };
 
-  const handleBlur = (e) => {
-    setTouched({ ...touched, [e.target.name]: true });
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    setTouched({ ...touched, [e.target.name as keyof FormData]: true });
     validate();
   };
 
   const validate = () => {
-    let newErrors = {};
+    let newErrors: Partial<Record<keyof FormData, string>> = {};
 
     // Password Validation
     if (!form.password) {
@@ -51,7 +60,7 @@ const SetNewPwdPage = () => {
     return newErrors;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const validationErrors = validate();
 

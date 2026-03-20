@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Search,
   SlidersHorizontal,
@@ -14,7 +14,7 @@ import {
 
 import SampleImg from "../assets/About Section/img1.webp";
 
-// ─── Data (same as HomePage) ─────────────────────────────────────────────────
+// ─── Data ────────────────────────────────────────────────────────────────────
 
 const servicesList = [
   "Plumbing",
@@ -102,7 +102,13 @@ const sampleCards = Array(6)
 
 // ─── Full Details Modal ───────────────────────────────────────────────────────
 
-const FullDetailsModal = ({ card, onClose }) => {
+const FullDetailsModal = ({
+  card,
+  onClose
+}: {
+  card: any;
+  onClose: () => void;
+}) => {
   const [activeImg, setActiveImg] = useState(0);
 
   // Prevent body scroll when modal is open
@@ -115,7 +121,7 @@ const FullDetailsModal = ({ card, onClose }) => {
 
   // Close on Escape key
   useEffect(() => {
-    const handler = (e) => {
+    const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", handler);
@@ -180,7 +186,7 @@ const FullDetailsModal = ({ card, onClose }) => {
                 {/* Dot indicators */}
                 {card.images.length > 1 && (
                   <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
-                    {card.images.map((_, i) => (
+                    {card.images.map((_: any, i: number) => (
                       <button
                         key={i}
                         onClick={() => setActiveImg(i)}
@@ -250,7 +256,13 @@ const FullDetailsModal = ({ card, onClose }) => {
 
 // ─── Service Card Component ───────────────────────────────────────────────────
 
-const ServiceCard = ({ card, onViewDetails }) => (
+const ServiceCard = ({
+  card,
+  onViewDetails
+}: {
+  card: any;
+  onViewDetails: (card: any) => void;
+}) => (
   <div className="bg-white rounded-2xl overflow-hidden shadow-md border border-gray-100 flex flex-col transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
     {/* Image */}
     <div className="w-full h-48 md:h-52 overflow-hidden flex-shrink-0">
@@ -284,7 +296,6 @@ const ServiceCard = ({ card, onViewDetails }) => (
         </div>
       </div>
       <div className="flex items-center gap-3 mt-2">
-        {/* ── Only change: onClick opens modal ── */}
         <button
           onClick={() => onViewDetails(card)}
           className="relative overflow-hidden flex-1 bg-[#FF5A00] text-white font-bold text-xs py-2.5 px-4 rounded-lg transition-all duration-300 hover:bg-black hover:scale-[1.02] group"
@@ -302,7 +313,15 @@ const ServiceCard = ({ card, onViewDetails }) => (
 
 // ─── Pagination Component ─────────────────────────────────────────────────────
 
-const Pagination = ({ current, total, onChange }) => (
+const Pagination = ({
+  current,
+  total,
+  onChange
+}: {
+  current: number;
+  total: number;
+  onChange: (page: number) => void;
+}) => (
   <div className="flex items-center justify-center gap-2 mt-8">
     <button
       onClick={() => onChange(Math.max(1, current - 1))}
@@ -350,10 +369,27 @@ const SidebarFilters = ({
   toggleProvince,
   selectedDistricts,
   toggleDistrict,
-  resetFilters,
+
   onApply,
   isDrawer = false,
   onClose
+}: {
+  selectedServices: string[];
+  toggleService: (service: string) => void;
+  priceMin: string;
+  setPriceMin: (price: string) => void;
+  priceMax: string;
+  setPriceMax: (price: string) => void;
+  emergencyService: string | null;
+  setEmergencyService: (service: string | null) => void;
+  selectedProvinces: string[];
+  toggleProvince: (province: string) => void;
+  selectedDistricts: string[];
+  toggleDistrict: (district: string) => void;
+  resetFilters: () => void;
+  onApply: () => void;
+  isDrawer?: boolean;
+  onClose?: () => void;
 }) => (
   <div className={`flex flex-col ${isDrawer ? "h-full" : ""}`}>
     {isDrawer && (
@@ -520,57 +556,56 @@ const SidebarFilters = ({
         <span className="relative z-10">Apply Changes</span>
         <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
       </button>
-      <button
-        onClick={resetFilters}
-        className="w-full text-[#FF5A00] font-bold text-sm py-1.5 hover:text-black transition-colors"
-      >
-        Reset All Filters
-      </button>
     </div>
   </div>
 );
 
-// ─── Main BrowsePlace Component ───────────────────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 const BrowsePlace = () => {
   const [citySearch, setCitySearch] = useState("");
   const [isServiceOpen, setIsServiceOpen] = useState(false);
-  const serviceDropdownRef = useRef(null);
-  const [selectedServices, setSelectedServices] = useState(["Plumbing"]);
+  const serviceDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [selectedServices, setSelectedServices] = useState<string[]>([
+    "Plumbing"
+  ]);
   const [priceMin, setPriceMin] = useState("1500");
   const [priceMax, setPriceMax] = useState("100000");
-  const [emergencyService, setEmergencyService] = useState(null);
-  const [selectedProvinces, setSelectedProvinces] = useState([]);
-  const [selectedDistricts, setSelectedDistricts] = useState([]);
+  const [emergencyService, setEmergencyService] = useState<string | null>(null);
+  const [selectedProvinces, setSelectedProvinces] = useState<string[]>([]);
+  const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const totalPages = 3;
 
-  // ── NEW: modal state ──
-  const [selectedCard, setSelectedCard] = useState(null);
+  const [selectedCard, setSelectedCard] = useState<any>(null);
 
   useEffect(() => {
     if (!isServiceOpen) return;
-    const handler = (e) => {
+    const handler = (e: MouseEvent) => {
       if (
         serviceDropdownRef.current &&
-        !serviceDropdownRef.current.contains(e.target)
-      )
+        !serviceDropdownRef.current.contains(e.target as Node)
+      ) {
         setIsServiceOpen(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [isServiceOpen]);
 
-  const toggleService = (s) =>
+  const toggleService = (s: string) =>
     setSelectedServices((p) =>
       p.includes(s) ? p.filter((x) => x !== s) : [...p, s]
     );
-  const toggleProvince = (p) =>
+
+  const toggleProvince = (p: string) =>
     setSelectedProvinces((prev) =>
       prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
     );
-  const toggleDistrict = (d) =>
+
+  const toggleDistrict = (d: string) =>
     setSelectedDistricts((prev) =>
       prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
     );
@@ -662,7 +697,7 @@ const BrowsePlace = () => {
             </div>
             <div className="flex items-center gap-2">
               <div className="flex-1 flex items-center justify-between bg-white border border-gray-200 rounded-xl px-3 h-12 shadow-sm text-gray-500 cursor-pointer">
-                <span className="text-sm font-medium">Any Property Type</span>
+                <span className="text-sm font-medium">{serviceLabel}</span>
                 <ChevronDown className="w-4 h-4" />
               </div>
               <button className="relative overflow-hidden flex items-center justify-center gap-2 px-5 h-12 rounded-xl bg-[#0072D1] text-white font-bold text-sm shadow-lg transition-all duration-300 hover:bg-black group flex-shrink-0">

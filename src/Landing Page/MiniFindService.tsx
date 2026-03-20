@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Search,
   SlidersHorizontal,
@@ -117,15 +117,15 @@ const cityCoords = {
 const DEFAULT_MAP_URL =
   "https://www.openstreetmap.org/export/embed.html?bbox=79.5,5.8,82.0,10.0&layer=mapnik";
 
-const buildProvinceUrl = (province) => {
-  const bbox = provinceBBox[province];
+const buildProvinceUrl = (province: string) => {
+  const bbox = provinceBBox[province as keyof typeof provinceBBox];
   return bbox
     ? `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik`
     : DEFAULT_MAP_URL;
 };
 
-const buildCityUrl = (city) => {
-  const c = cityCoords[city];
+const buildCityUrl = (city: string) => {
+  const c = cityCoords[city as keyof typeof cityCoords];
   if (!c) return DEFAULT_MAP_URL;
   const d = 0.05;
   return `https://www.openstreetmap.org/export/embed.html?bbox=${c.lon - d},${
@@ -137,35 +137,35 @@ const buildCityUrl = (city) => {
 
 const ChooseCity = () => {
   // Map
-  const [selectedProvince, setSelectedProvince] = useState(null);
-  const [selectedCity, setSelectedCity] = useState(null);
+  const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
+  const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [mapUrl, setMapUrl] = useState(DEFAULT_MAP_URL);
   const [mapKey, setMapKey] = useState(0);
 
   // Mobile accordion
-  const [expandedProvinces, setExpandedProvinces] = useState([]);
+  const [expandedProvinces, setExpandedProvinces] = useState<string[]>([]);
 
   // Search bar
   const [citySearch, setCitySearch] = useState("");
   const [isServiceOpen, setIsServiceOpen] = useState(false);
-  const [selectedServices, setSelectedServices] = useState([]);
-  const serviceDropdownRef = useRef(null);
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const serviceDropdownRef = useRef<HTMLDivElement>(null);
 
   // Filter drawer
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [priceMin, setPriceMin] = useState("1500");
   const [priceMax, setPriceMax] = useState("100000");
-  const [emergencyService, setEmergencyService] = useState(null);
-  const [filterProvinces, setFilterProvinces] = useState([]);
-  const [filterDistricts, setFilterDistricts] = useState([]);
+  const [emergencyService, setEmergencyService] = useState<string | null>(null);
+  const [filterProvinces, setFilterProvinces] = useState<string[]>([]);
+  const [filterDistricts, setFilterDistricts] = useState<string[]>([]);
 
   // ── Close service dropdown on outside click ──
   useEffect(() => {
     if (!isServiceOpen) return;
-    const handler = (e) => {
+    const handler = (e: MouseEvent) => {
       if (
         serviceDropdownRef.current &&
-        !serviceDropdownRef.current.contains(e.target)
+        !serviceDropdownRef.current.contains(e.target as Node)
       ) {
         setIsServiceOpen(false);
       }
@@ -175,12 +175,12 @@ const ChooseCity = () => {
   }, [isServiceOpen]);
 
   // ── Map helpers ──
-  const updateMap = (url) => {
+  const updateMap = (url: string) => {
     setMapUrl(url);
     setMapKey((k) => k + 1);
   };
 
-  const handleProvinceMapCheck = (loc) => {
+  const handleProvinceMapCheck = (loc: any) => {
     if (selectedProvince === loc.province && !selectedCity) {
       setSelectedProvince(null);
       setSelectedCity(null);
@@ -193,7 +193,7 @@ const ChooseCity = () => {
     }
   };
 
-  const handleCityMapCheck = (loc, city) => {
+  const handleCityMapCheck = (loc: any, city: string) => {
     if (selectedCity === city) {
       setSelectedCity(null);
       setSelectedProvince(loc.province);
@@ -213,19 +213,19 @@ const ChooseCity = () => {
   };
 
   // ── Toggles ──
-  const toggleAccordion = (p) =>
+  const toggleAccordion = (p: string) =>
     setExpandedProvinces((prev) =>
       prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
     );
-  const toggleService = (s) =>
+  const toggleService = (s: string) =>
     setSelectedServices((prev) =>
       prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
     );
-  const toggleFilterProvince = (p) =>
+  const toggleFilterProvince = (p: string) =>
     setFilterProvinces((prev) =>
       prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
     );
-  const toggleFilterDistrict = (d) =>
+  const toggleFilterDistrict = (d: string) =>
     setFilterDistricts((prev) =>
       prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
     );
@@ -247,7 +247,15 @@ const ChooseCity = () => {
       : `${selectedServices.length} Selected`;
 
   // ── Custom checkbox ──
-  const Checkbox = ({ checked, color = "#FF5A00", size = "w-4 h-4" }) => (
+  const Checkbox = ({
+    checked,
+    color = "#FF5A00",
+    size = "w-4 h-4"
+  }: {
+    checked: boolean;
+    color?: string;
+    size?: string;
+  }) => (
     <div
       className={`${size} rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors duration-200 cursor-pointer`}
       style={

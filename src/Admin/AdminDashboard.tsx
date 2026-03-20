@@ -5,8 +5,6 @@ import {
   UserCheck,
   ClipboardList,
   CheckSquare,
-  Search,
-  Bell,
   ChevronDown,
   TrendingUp,
   Clock,
@@ -18,12 +16,10 @@ import {
   Pencil,
   Trash2,
   CheckCircle,
-  Menu,
   X,
   AlertCircle,
   ChevronLeft,
   ChevronRight,
-  Filter,
   Plus,
   LogOut
 } from "lucide-react";

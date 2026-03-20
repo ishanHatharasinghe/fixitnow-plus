@@ -2,16 +2,27 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import categoriesBackground from "../../assets/Backgrounds/Signupscreens.jpg";
 
+interface AccountFormData {
+  username: string;
+  description: string;
+  serviceType: string;
+  phone: string;
+}
+
 const SetupYourAccountPage = () => {
-  const [localData, setLocalData] = useState({
+  const [localData, setLocalData] = useState<AccountFormData>({
     username: "",
     description: "",
     serviceType: "",
     phone: ""
   });
 
-  const [errors, setErrors] = useState({});
-  const [touched, setTouched] = useState({});
+  const [errors, setErrors] = useState<
+    Partial<Record<keyof AccountFormData, string>>
+  >({});
+  const [touched, setTouched] = useState<
+    Partial<Record<keyof AccountFormData, boolean>>
+  >({});
   const [loading, setLoading] = useState(false);
 
   const serviceOptions = [
@@ -37,7 +48,7 @@ const SetupYourAccountPage = () => {
   ];
 
   const validate = () => {
-    let newErrors = {};
+    let newErrors: Partial<Record<keyof AccountFormData, string>> = {};
 
     if (!localData.username.trim()) {
       newErrors.username = "Username is required";
@@ -66,28 +77,40 @@ const SetupYourAccountPage = () => {
     return newErrors;
   };
 
-  const handleChange = (e) => {
+  const handleChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
+  ) => {
     const { name, value } = e.target;
-    setLocalData({ ...localData, [name]: value });
-    if (errors[name]) {
-      setErrors({ ...errors, [name]: "" });
+    setLocalData({ ...localData, [name as keyof AccountFormData]: value });
+    if (errors[name as keyof AccountFormData]) {
+      setErrors({ ...errors, [name as keyof AccountFormData]: "" });
     }
   };
 
-  const handleBlur = (e) => {
-    setTouched({ ...touched, [e.target.name]: true });
+  const handleBlur = (
+    e: React.FocusEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
+  ) => {
+    const { name } = e.target;
+    setTouched({ ...touched, [name as keyof AccountFormData]: true });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const validationErrors = validate();
     setErrors(validationErrors);
 
     // Mark all as touched
-    const allTouched = Object.keys(localData).reduce((acc, key) => {
-      acc[key] = true;
-      return acc;
-    }, {});
+    const allTouched = Object.keys(localData).reduce(
+      (acc: Partial<Record<keyof AccountFormData, boolean>>, key) => {
+        acc[key as keyof AccountFormData] = true;
+        return acc;
+      },
+      {}
+    );
     setTouched(allTouched);
 
     if (Object.keys(validationErrors).length === 0) {
@@ -100,7 +123,7 @@ const SetupYourAccountPage = () => {
     }
   };
 
-  const getInputClass = (name) => {
+  const getInputClass = (name: keyof AccountFormData) => {
     const baseClass =
       "w-full mt-2 p-3 rounded-2xl border-2 transition-all focus:outline-none ";
     return (
@@ -154,7 +177,7 @@ const SetupYourAccountPage = () => {
               <label className="text-sm font-bold">Description</label>
               <textarea
                 name="description"
-                rows="3"
+                rows={3}
                 value={localData.description}
                 onChange={handleChange}
                 onBlur={handleBlur}
@@ -247,7 +270,9 @@ const SetupYourAccountPage = () => {
               </button>
 
               <button
-                onClick={handleSubmit}
+                onClick={(e: any) =>
+                  handleSubmit(e as React.FormEvent<HTMLFormElement>)
+                }
                 disabled={loading}
                 className={`relative overflow-hidden w-full py-3 sm:py-4 rounded-2xl font-semibold transition-all duration-300 group ${
                   loading

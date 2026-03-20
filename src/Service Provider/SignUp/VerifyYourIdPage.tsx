@@ -1,25 +1,35 @@
 import { useState, useRef } from "react";
 import locationBackground from "../../assets/Backgrounds/Signupscreens3.png";
 
+interface IdVerificationFormData {
+  idNumber: string;
+  frontImage: File | null;
+  backImage: File | null;
+}
+
 const VerifyYourIdPage = () => {
   // Keeping simple local state for the UI demonstration
-  const [localData, setLocalData] = useState({
+  const [localData, setLocalData] = useState<IdVerificationFormData>({
     idNumber: "",
     frontImage: null,
     backImage: null
   });
 
-  const [errors, setErrors] = useState({});
-  const [touched, setTouched] = useState({});
+  const [errors, setErrors] = useState<
+    Partial<Record<keyof IdVerificationFormData, string>>
+  >({});
+  const [touched, setTouched] = useState<
+    Partial<Record<keyof IdVerificationFormData, boolean>>
+  >({});
   const [dragOver, setDragOver] = useState({ front: false, back: false });
 
   // Refs for hidden file inputs
-  const frontInputRef = useRef(null);
-  const backInputRef = useRef(null);
+  const frontInputRef = useRef<HTMLInputElement>(null);
+  const backInputRef = useRef<HTMLInputElement>(null);
 
   // Validation function
   const validate = () => {
-    let newErrors = {};
+    let newErrors: Partial<Record<keyof IdVerificationFormData, string>> = {};
     if (!localData.idNumber.trim()) {
       newErrors.idNumber = "ID number is required";
     }
@@ -33,31 +43,42 @@ const VerifyYourIdPage = () => {
     return newErrors;
   };
 
-  const handleChange = (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setLocalData({ ...localData, [name]: value });
-    if (errors[name]) setErrors({ ...errors, [name]: "" });
-  };
-
-  const handleFileChange = (e) => {
-    const { name, files } = e.target;
-    if (files[0]) {
-      setLocalData({ ...localData, [name]: files[0] });
-      setErrors({ ...errors, [name]: "" });
+    setLocalData({
+      ...localData,
+      [name as keyof IdVerificationFormData]: value
+    });
+    if (errors[name as keyof IdVerificationFormData]) {
+      setErrors({ ...errors, [name as keyof IdVerificationFormData]: "" });
     }
   };
 
-  const handleDragOver = (e, type) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, files } = e.target;
+    if (files?.[0]) {
+      setLocalData({
+        ...localData,
+        [name as keyof IdVerificationFormData]: files[0]
+      });
+      setErrors({ ...errors, [name as keyof IdVerificationFormData]: "" });
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, type: string) => {
     e.preventDefault();
     setDragOver({ ...dragOver, [type]: true });
   };
 
-  const handleDragLeave = (e, type) => {
+  const handleDragLeave = (
+    e: React.DragEvent<HTMLDivElement>,
+    type: string
+  ) => {
     e.preventDefault();
     setDragOver({ ...dragOver, [type]: false });
   };
 
-  const handleDrop = (e, type) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, type: string) => {
     e.preventDefault();
     setDragOver({ ...dragOver, [type]: false });
     const file = e.dataTransfer.files[0];
@@ -68,11 +89,11 @@ const VerifyYourIdPage = () => {
     }
   };
 
-  const handleBlur = (field) => {
+  const handleBlur = (field: keyof IdVerificationFormData) => {
     setTouched({ ...touched, [field]: true });
   };
 
-  const handleNextPage = (e) => {
+  const handleNextPage = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const validationErrors = validate();
     setErrors(validationErrors);
@@ -147,7 +168,7 @@ const VerifyYourIdPage = () => {
                       ? "border-red-500 bg-red-50"
                       : "border-[#0072D1]/30 hover:border-[#0072D1] bg-white"
                   }`}
-                  onClick={() => frontInputRef.current.click()}
+                  onClick={() => frontInputRef.current?.click()}
                   onDragOver={(e) => handleDragOver(e, "front")}
                   onDragLeave={(e) => handleDragLeave(e, "front")}
                   onDrop={(e) => handleDrop(e, "front")}
@@ -203,7 +224,7 @@ const VerifyYourIdPage = () => {
                       ? "border-red-500 bg-red-50"
                       : "border-[#0072D1]/30 hover:border-[#0072D1] bg-white"
                   }`}
-                  onClick={() => backInputRef.current.click()}
+                  onClick={() => backInputRef.current?.click()}
                   onDragOver={(e) => handleDragOver(e, "back")}
                   onDragLeave={(e) => handleDragLeave(e, "back")}
                   onDrop={(e) => handleDrop(e, "back")}
@@ -252,7 +273,9 @@ const VerifyYourIdPage = () => {
               </button>
 
               <button
-                onClick={handleNextPage}
+                onClick={(e: any) =>
+                  handleNextPage(e as React.FormEvent<HTMLFormElement>)
+                }
                 type="button"
                 className="relative overflow-hidden w-full bg-[#0072D1] hover:bg-[#000000] text-white py-3 sm:py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg group mb-4"
               >

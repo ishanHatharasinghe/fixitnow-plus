@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, type ReactNode } from "react";
 import {
   ArrowRight,
   Edit3,
@@ -13,7 +13,6 @@ import {
   List,
   FileText,
   AlertCircle,
-  Clock,
   Calendar,
   User,
   Briefcase
@@ -82,13 +81,41 @@ const DAYS = [
   "Saturday",
   "Sunday"
 ];
-const HOURS = Array.from({ length: 12 }, (_, i) =>
-  String(i + 1).padStart(2, "0")
-);
 
 // ─── Initial form state ───────────────────────────────────────────────────────
 
-const INITIAL_FORM = {
+export interface FormType {
+  title: string;
+  category: string;
+  specializations: string;
+  location: string;
+  specificCities: string;
+  travelDistance: string;
+  pricingModel: string;
+  description: string;
+  keywords: string;
+  checklist: string[];
+  clientMaterials: string;
+  timeFromHour: string;
+  timeFromAmPm: string;
+  timeToHour: string;
+  timeToAmPm: string;
+  availableDays: string[];
+  startingPrice: string;
+  inspectionFee: string;
+  emergency: string;
+  ownerName: string;
+  ownerAddress: string;
+  nic: string;
+  mobile: string;
+  email: string;
+  images: File[];
+  imagePreviews: string[];
+  pdf: File | null;
+  pdfName: string;
+}
+
+const INITIAL_FORM: FormType = {
   title: "",
   category: "",
   specializations: "",
@@ -121,22 +148,22 @@ const INITIAL_FORM = {
 
 // ─── Validation helpers ───────────────────────────────────────────────────────
 
-const VALIDATORS = {
-  title: (v) => {
+const VALIDATORS: Record<string, (v: string) => string | null> = {
+  title: (v: string) => {
     if (!v || !v.trim()) return "Post title is required.";
     if (v.trim().length < 10) return "Title must be at least 10 characters.";
     if (v.trim().length > 120) return "Title must be 120 characters or fewer.";
     return null;
   },
-  category: (v) => (!v ? "Please select a service category." : null),
-  specializations: (v) => {
+  category: (v: string) => (!v ? "Please select a service category." : null),
+  specializations: (v: string) => {
     if (!v || !v.trim()) return null; // optional
     if (v.trim().length > 200)
       return "Specializations must be 200 characters or fewer.";
     return null;
   },
-  location: (v) => (!v ? "Please select a province / location." : null),
-  specificCities: (v) => {
+  location: (v: string) => (!v ? "Please select a province / location." : null),
+  specificCities: (v: string) => {
     if (!v || !v.trim()) return null; // optional
     if (!/^[a-zA-Z\s,]+$/.test(v.trim()))
       return "Cities should contain only letters, spaces, and commas.";
@@ -144,7 +171,7 @@ const VALIDATORS = {
   },
   travelDistance: () => null, // optional
   pricingModel: () => null, // optional
-  description: (v) => {
+  description: (v: string) => {
     if (!v || !v.trim()) return null; // optional
     if (v.trim().length < 20)
       return "Description should be at least 20 characters.";
@@ -152,66 +179,66 @@ const VALIDATORS = {
       return "Description must be 1000 characters or fewer.";
     return null;
   },
-  keywords: (v) => {
+  keywords: (v: string) => {
     if (!v || !v.trim()) return null; // optional
     if (v.trim().length > 300)
       return "Keywords must be 300 characters or fewer.";
     return null;
   },
-  timeFromHour: (v) => {
+  timeFromHour: (v: string) => {
     const n = Number(v);
-    if (!v && v !== 0) return null;
+    if (!v) return null;
     if (isNaN(n) || n < 1 || n > 12) return "Hour must be between 1 and 12.";
     return null;
   },
-  timeToHour: (v) => {
+  timeToHour: (v: string) => {
     const n = Number(v);
-    if (!v && v !== 0) return null;
+    if (!v) return null;
     if (isNaN(n) || n < 1 || n > 12) return "Hour must be between 1 and 12.";
     return null;
   },
-  startingPrice: (v) => {
-    if (!v && v !== 0) return null; // optional
+  startingPrice: (v: string) => {
+    if (!v) return null; // optional
     if (isNaN(Number(v)) || Number(v) < 0)
       return "Starting price must be a positive number.";
     if (Number(v) > 10000000) return "Starting price seems too high.";
     return null;
   },
-  inspectionFee: (v) => {
-    if (!v && v !== 0) return null; // optional
+  inspectionFee: (v: string) => {
+    if (!v) return null; // optional
     if (isNaN(Number(v)) || Number(v) < 0)
       return "Inspection fee must be a positive number.";
     if (Number(v) > 10000000) return "Inspection fee seems too high.";
     return null;
   },
-  ownerName: (v) => {
+  ownerName: (v: string) => {
     if (!v || !v.trim()) return "Full name is required.";
     if (v.trim().length < 3) return "Name must be at least 3 characters.";
     if (!/^[a-zA-Z\s.'-]+$/.test(v.trim()))
       return "Name should contain only letters, spaces, and basic punctuation.";
     return null;
   },
-  ownerAddress: (v) => {
+  ownerAddress: (v: string) => {
     if (!v || !v.trim()) return null; // optional
     if (v.trim().length < 5) return "Address seems too short.";
     if (v.trim().length > 300)
       return "Address must be 300 characters or fewer.";
     return null;
   },
-  nic: (v) => {
+  nic: (v: string) => {
     if (!v || !v.trim()) return null; // optional
     // Sri Lanka NIC: 9 digits + V/X  OR  12 digits
     if (!/^(\d{9}[VXvx]|\d{12})$/.test(v.trim()))
       return "NIC must be 9 digits followed by V/X, or 12 digits.";
     return null;
   },
-  mobile: (v) => {
+  mobile: (v: string) => {
     if (!v || !v.trim()) return "Mobile number is required.";
     if (!/^\d{9}$/.test(v.trim()))
       return "Enter a valid 9-digit mobile number (without country code).";
     return null;
   },
-  email: (v) => {
+  email: (v: string) => {
     if (!v || !v.trim()) return "Email address is required.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()))
       return "Enter a valid email address.";
@@ -219,19 +246,19 @@ const VALIDATORS = {
   }
 };
 
-// Step 1 required field keys
-const STEP1_REQUIRED = [
-  "title",
-  "category",
-  "location",
-  "ownerName",
-  "email",
-  "mobile"
-];
-
 // ─── Reusable UI primitives ───────────────────────────────────────────────────
 
-const Field = ({ label, children, required = false, error }) => (
+const Field = ({
+  label,
+  children,
+  required = false,
+  error
+}: {
+  label: string;
+  children: ReactNode;
+  required?: boolean;
+  error?: string | null;
+}) => (
   <div className="flex flex-col gap-1.5">
     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
       {label}
@@ -247,7 +274,11 @@ const Field = ({ label, children, required = false, error }) => (
   </div>
 );
 
-const Input = ({ className = "", error, ...props }) => (
+const Input = ({
+  className = "",
+  error,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement> & { error?: string | null }) => (
   <input
     className={`w-full bg-white border-2 rounded-xl px-4 py-3 text-sm font-medium text-gray-800
       placeholder-gray-300 outline-none transition-all duration-200
@@ -262,7 +293,13 @@ const Input = ({ className = "", error, ...props }) => (
   />
 );
 
-const Textarea = ({ className = "", error, ...props }) => (
+const Textarea = ({
+  className = "",
+  error,
+  ...props
+}: React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  error?: string | null;
+}) => (
   <textarea
     className={`w-full bg-white border-2 rounded-xl px-4 py-3 text-sm font-medium text-gray-800
       placeholder-gray-300 outline-none transition-all duration-200 resize-none
@@ -284,6 +321,13 @@ const Select = ({
   onChange,
   className = "",
   error
+}: {
+  options: string[];
+  placeholder?: string;
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+  error?: string | null;
 }) => (
   <div className="relative">
     <select
@@ -313,7 +357,15 @@ const Select = ({
   </div>
 );
 
-const RadioPill = ({ label, checked, onChange }) => (
+const RadioPill = ({
+  label,
+  checked,
+  onChange
+}: {
+  label: string;
+  checked: boolean;
+  onChange: () => void;
+}) => (
   <button
     type="button"
     onClick={onChange}
@@ -327,7 +379,15 @@ const RadioPill = ({ label, checked, onChange }) => (
   </button>
 );
 
-const DayChip = ({ label, checked, onChange }) => (
+const DayChip = ({
+  label,
+  checked,
+  onChange
+}: {
+  label: string;
+  checked: boolean;
+  onChange: () => void;
+}) => (
   <button
     type="button"
     onClick={onChange}
@@ -342,7 +402,15 @@ const DayChip = ({ label, checked, onChange }) => (
 );
 
 // Primary CTA button — matches project style
-const NextBtn = ({ label = "Next", onClick, icon = true }) => (
+const NextBtn = ({
+  label = "Next",
+  onClick,
+  icon = true
+}: {
+  label?: string;
+  onClick: () => void;
+  icon?: boolean;
+}) => (
   <div className="flex justify-center pt-6">
     <button
       onClick={onClick}
@@ -369,7 +437,15 @@ const NextBtn = ({ label = "Next", onClick, icon = true }) => (
 );
 
 // Section divider with icon
-const SectionTitle = ({ icon: Icon, title, subtitle }) => (
+const SectionTitle = ({
+  icon: Icon,
+  title,
+  subtitle
+}: {
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  title: string;
+  subtitle?: string;
+}) => (
   <div className="flex items-start gap-3 pb-4 border-b-2 border-gray-50 mb-6">
     <div className="w-9 h-9 rounded-xl bg-[#0072D1]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
       <Icon className="w-4.5 h-4.5 text-[#0072D1]" strokeWidth={2.5} />
@@ -387,7 +463,13 @@ const SectionTitle = ({ icon: Icon, title, subtitle }) => (
 
 // ─── STEP INDICATOR ───────────────────────────────────────────────────────────
 
-const StepNav = ({ step, setStep }) => {
+const StepNav = ({
+  step,
+  setStep
+}: {
+  step: number;
+  setStep: React.Dispatch<React.SetStateAction<number>>;
+}) => {
   const steps = [
     { label: "Details", icon: Edit3 },
     { label: "Gallery", icon: ImageIcon },
@@ -458,21 +540,29 @@ const StepNav = ({ step, setStep }) => {
 
 // ─── STEP 1: Details ──────────────────────────────────────────────────────────
 
-const DetailsStep = ({ form, set, onNext }) => {
+const DetailsStep = ({
+  form,
+  set,
+  onNext
+}: {
+  form: FormType;
+  set: React.Dispatch<React.SetStateAction<FormType>>;
+  onNext: () => void;
+}) => {
   const [checkItem, setCheckItem] = useState("");
-  const [errors, setErrors] = useState({});
-  const [touched, setTouched] = useState({});
+  const [errors, setErrors] = useState<Record<string, string | null>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   // Validate a single field and update error state
-  const validateField = (name, value) => {
-    const validator = VALIDATORS[name];
+  const validateField = (name: string, value: string) => {
+    const validator = VALIDATORS[name as keyof typeof VALIDATORS];
     const error = validator ? validator(value) : null;
     setErrors((prev) => ({ ...prev, [name]: error }));
     return error;
   };
 
   // Mark field as touched on blur and validate
-  const handleBlur = (name, value) => {
+  const handleBlur = (name: string, value: string) => {
     setTouched((prev) => ({ ...prev, [name]: true }));
     validateField(name, value);
   };
@@ -497,16 +587,20 @@ const DetailsStep = ({ form, set, onNext }) => {
       "mobile",
       "email"
     ];
-    const newErrors = {};
+    const newErrors: Record<string, string | null> = {};
     let valid = true;
     allKeys.forEach((key) => {
-      const error = VALIDATORS[key] ? VALIDATORS[key](form[key]) : null;
+      const error = VALIDATORS[key as keyof typeof VALIDATORS]
+        ? VALIDATORS[key as keyof typeof VALIDATORS](
+            form[key as keyof FormType] as string
+          )
+        : null;
       if (error) valid = false;
       newErrors[key] = error;
     });
     setErrors(newErrors);
     // Mark all as touched so errors are visible
-    const allTouched = {};
+    const allTouched: Record<string, boolean> = {};
     allKeys.forEach((k) => (allTouched[k] = true));
     setTouched(allTouched);
     return valid;
@@ -519,24 +613,24 @@ const DetailsStep = ({ form, set, onNext }) => {
   const addCheck = () => {
     const t = checkItem.trim();
     if (!t) return;
-    set((f) => ({ ...f, checklist: [...f.checklist, t] }));
+    set((f: FormType) => ({ ...f, checklist: [...f.checklist, t] }));
     setCheckItem("");
   };
 
-  const removeCheck = (i) =>
-    set((f) => ({
+  const removeCheck = (i: number) =>
+    set((f: FormType) => ({
       ...f,
       checklist: f.checklist.filter((_, idx) => idx !== i)
     }));
-  const toggleDay = (d) =>
-    set((f) => ({
+  const toggleDay = (d: string) =>
+    set((f: FormType) => ({
       ...f,
       availableDays: f.availableDays.includes(d)
         ? f.availableDays.filter((x) => x !== d)
         : [...f.availableDays, d]
     }));
 
-  const err = (name) => (touched[name] ? errors[name] : null);
+  const err = (name: string) => (touched[name] ? errors[name] : null);
 
   return (
     <div className="space-y-8">
@@ -565,10 +659,13 @@ const DetailsStep = ({ form, set, onNext }) => {
             <Field label="Service Category" required error={err("category")}>
               <Select
                 value={form.category}
-                onChange={(v) => {
-                  set((f) => ({ ...f, category: v }));
+                onChange={(v: string) => {
+                  set((f: FormType) => ({ ...f, category: v }));
                   validateField("category", v);
-                  setTouched((prev) => ({ ...prev, category: true }));
+                  setTouched((prev: Record<string, boolean>) => ({
+                    ...prev,
+                    category: true
+                  }));
                 }}
                 options={SERVICE_CATEGORIES}
                 placeholder="Select category"
@@ -578,12 +675,17 @@ const DetailsStep = ({ form, set, onNext }) => {
             <Field label="Specializations" error={err("specializations")}>
               <Input
                 value={form.specializations}
-                onChange={(e) => {
-                  set((f) => ({ ...f, specializations: e.target.value }));
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  set((f: FormType) => ({
+                    ...f,
+                    specializations: e.target.value
+                  }));
                   if (touched.specializations)
                     validateField("specializations", e.target.value);
                 }}
-                onBlur={(e) => handleBlur("specializations", e.target.value)}
+                onBlur={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  handleBlur("specializations", e.target.value)
+                }
                 placeholder="e.g. Leak repairs, PVC pipe"
                 error={err("specializations")}
               />
@@ -594,10 +696,13 @@ const DetailsStep = ({ form, set, onNext }) => {
             <Field label="Province / Location" required error={err("location")}>
               <Select
                 value={form.location}
-                onChange={(v) => {
-                  set((f) => ({ ...f, location: v }));
+                onChange={(v: string) => {
+                  set((f: FormType) => ({ ...f, location: v }));
                   validateField("location", v);
-                  setTouched((prev) => ({ ...prev, location: true }));
+                  setTouched((prev: Record<string, boolean>) => ({
+                    ...prev,
+                    location: true
+                  }));
                 }}
                 options={PROVINCES}
                 placeholder="Select province"
@@ -607,12 +712,17 @@ const DetailsStep = ({ form, set, onNext }) => {
             <Field label="Specific Cities" error={err("specificCities")}>
               <Input
                 value={form.specificCities}
-                onChange={(e) => {
-                  set((f) => ({ ...f, specificCities: e.target.value }));
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  set((f: FormType) => ({
+                    ...f,
+                    specificCities: e.target.value
+                  }));
                   if (touched.specificCities)
                     validateField("specificCities", e.target.value);
                 }}
-                onBlur={(e) => handleBlur("specificCities", e.target.value)}
+                onBlur={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  handleBlur("specificCities", e.target.value)
+                }
                 placeholder="e.g. Moratuwa, Panadura"
                 error={err("specificCities")}
               />
@@ -738,12 +848,17 @@ const DetailsStep = ({ form, set, onNext }) => {
               <div className="flex items-center gap-2">
                 <Input
                   value={form.timeFromHour}
-                  onChange={(e) => {
-                    set((f) => ({ ...f, timeFromHour: e.target.value }));
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    set((f: FormType) => ({
+                      ...f,
+                      timeFromHour: e.target.value
+                    }));
                     if (touched.timeFromHour)
                       validateField("timeFromHour", e.target.value);
                   }}
-                  onBlur={(e) => handleBlur("timeFromHour", e.target.value)}
+                  onBlur={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    handleBlur("timeFromHour", e.target.value)
+                  }
                   placeholder="07"
                   className="w-16 text-center px-2"
                   type="number"
@@ -753,7 +868,9 @@ const DetailsStep = ({ form, set, onNext }) => {
                 />
                 <Select
                   value={form.timeFromAmPm}
-                  onChange={(v) => set((f) => ({ ...f, timeFromAmPm: v }))}
+                  onChange={(v: string) =>
+                    set((f: FormType) => ({ ...f, timeFromAmPm: v }))
+                  }
                   options={["AM", "PM"]}
                   className="w-20"
                 />
@@ -762,12 +879,17 @@ const DetailsStep = ({ form, set, onNext }) => {
                 </span>
                 <Input
                   value={form.timeToHour}
-                  onChange={(e) => {
-                    set((f) => ({ ...f, timeToHour: e.target.value }));
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    set((f: FormType) => ({
+                      ...f,
+                      timeToHour: e.target.value
+                    }));
                     if (touched.timeToHour)
                       validateField("timeToHour", e.target.value);
                   }}
-                  onBlur={(e) => handleBlur("timeToHour", e.target.value)}
+                  onBlur={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    handleBlur("timeToHour", e.target.value)
+                  }
                   placeholder="07"
                   className="w-16 text-center px-2"
                   type="number"
@@ -777,7 +899,9 @@ const DetailsStep = ({ form, set, onNext }) => {
                 />
                 <Select
                   value={form.timeToAmPm}
-                  onChange={(v) => set((f) => ({ ...f, timeToAmPm: v }))}
+                  onChange={(v: string) =>
+                    set((f: FormType) => ({ ...f, timeToAmPm: v }))
+                  }
                   options={["AM", "PM"]}
                   className="w-20"
                 />
@@ -858,12 +982,16 @@ const DetailsStep = ({ form, set, onNext }) => {
               <RadioPill
                 label="Yes I'm available"
                 checked={form.emergency === "Yes"}
-                onChange={() => set((f) => ({ ...f, emergency: "Yes" }))}
+                onChange={() =>
+                  set((f: FormType) => ({ ...f, emergency: "Yes" }))
+                }
               />
               <RadioPill
                 label="No"
                 checked={form.emergency === "No"}
-                onChange={() => set((f) => ({ ...f, emergency: "No" }))}
+                onChange={() =>
+                  set((f: FormType) => ({ ...f, emergency: "No" }))
+                }
               />
             </div>
           </Field>
@@ -882,12 +1010,14 @@ const DetailsStep = ({ form, set, onNext }) => {
             <Field label="Full Name" required error={err("ownerName")}>
               <Input
                 value={form.ownerName}
-                onChange={(e) => {
-                  set((f) => ({ ...f, ownerName: e.target.value }));
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  set((f: FormType) => ({ ...f, ownerName: e.target.value }));
                   if (touched.ownerName)
                     validateField("ownerName", e.target.value);
                 }}
-                onBlur={(e) => handleBlur("ownerName", e.target.value)}
+                onBlur={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  handleBlur("ownerName", e.target.value)
+                }
                 placeholder="Your full name"
                 error={err("ownerName")}
               />
@@ -896,11 +1026,13 @@ const DetailsStep = ({ form, set, onNext }) => {
               <Input
                 value={form.email}
                 type="email"
-                onChange={(e) => {
-                  set((f) => ({ ...f, email: e.target.value }));
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  set((f: FormType) => ({ ...f, email: e.target.value }));
                   if (touched.email) validateField("email", e.target.value);
                 }}
-                onBlur={(e) => handleBlur("email", e.target.value)}
+                onBlur={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  handleBlur("email", e.target.value)
+                }
                 placeholder="sample@gmail.com"
                 error={err("email")}
               />
@@ -925,11 +1057,13 @@ const DetailsStep = ({ form, set, onNext }) => {
             <Field label="NIC Number" error={err("nic")}>
               <Input
                 value={form.nic}
-                onChange={(e) => {
-                  set((f) => ({ ...f, nic: e.target.value }));
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  set((f: FormType) => ({ ...f, nic: e.target.value }));
                   if (touched.nic) validateField("nic", e.target.value);
                 }}
-                onBlur={(e) => handleBlur("nic", e.target.value)}
+                onBlur={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  handleBlur("nic", e.target.value)
+                }
                 placeholder="e.g. 199012345678"
                 error={err("nic")}
               />
@@ -944,11 +1078,13 @@ const DetailsStep = ({ form, set, onNext }) => {
                 </div>
                 <Input
                   value={form.mobile}
-                  onChange={(e) => {
-                    set((f) => ({ ...f, mobile: e.target.value }));
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    set((f: FormType) => ({ ...f, mobile: e.target.value }));
                     if (touched.mobile) validateField("mobile", e.target.value);
                   }}
-                  onBlur={(e) => handleBlur("mobile", e.target.value)}
+                  onBlur={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    handleBlur("mobile", e.target.value)
+                  }
                   placeholder="703 215 789"
                   type="tel"
                   maxLength={9}
@@ -967,12 +1103,20 @@ const DetailsStep = ({ form, set, onNext }) => {
 
 // ─── STEP 2: Gallery ──────────────────────────────────────────────────────────
 
-const GalleryStep = ({ form, set, onNext }) => {
-  const imgRef = useRef(null);
-  const pdfRef = useRef(null);
+const GalleryStep = ({
+  form,
+  set,
+  onNext
+}: {
+  form: FormType;
+  set: React.Dispatch<React.SetStateAction<FormType>>;
+  onNext: () => void;
+}) => {
+  const imgRef = useRef<HTMLInputElement>(null);
+  const pdfRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  const [imageError, setImageError] = useState(null);
-  const [pdfError, setPdfError] = useState(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   const MAX_IMAGE_SIZE_MB = 3;
   const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
@@ -985,14 +1129,16 @@ const GalleryStep = ({ form, set, onNext }) => {
   const MAX_PDF_SIZE_MB = 10;
   const MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
 
-  const processFiles = (files) => {
+  const processFiles = (files: File[]) => {
     setImageError(null);
-    const imageFiles = Array.from(files).filter((f) =>
+    const imageFiles = Array.from(files).filter((f: File) =>
       f.type.startsWith("image/")
     );
-    const oversized = imageFiles.filter((f) => f.size > MAX_IMAGE_SIZE_BYTES);
+    const oversized = imageFiles.filter(
+      (f: File) => f.size > MAX_IMAGE_SIZE_BYTES
+    );
     const invalidType = imageFiles.filter(
-      (f) => !ALLOWED_IMAGE_TYPES.includes(f.type)
+      (f: File) => !ALLOWED_IMAGE_TYPES.includes(f.type)
     );
 
     if (invalidType.length > 0) {
@@ -1012,8 +1158,8 @@ const GalleryStep = ({ form, set, onNext }) => {
       );
       return;
     }
-    const newPreviews = imageFiles.map((f) => URL.createObjectURL(f));
-    set((prev) => ({
+    const newPreviews = imageFiles.map((f: File) => URL.createObjectURL(f));
+    set((prev: FormType) => ({
       ...prev,
       images: [...prev.images, ...imageFiles].slice(0, 5),
       imagePreviews: [...prev.imagePreviews, ...newPreviews].slice(0, 5)
@@ -1021,15 +1167,15 @@ const GalleryStep = ({ form, set, onNext }) => {
   };
 
   const handleDrop = useCallback(
-    (e) => {
+    (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       setDragging(false);
-      processFiles(e.dataTransfer.files);
+      processFiles(Array.from(e.dataTransfer.files));
     },
     [form.imagePreviews.length]
   );
 
-  const removeImage = (i) => {
+  const removeImage = (i: number) => {
     setImageError(null);
     set((prev) => ({
       ...prev,
@@ -1038,7 +1184,7 @@ const GalleryStep = ({ form, set, onNext }) => {
     }));
   };
 
-  const handlePdf = (e) => {
+  const handlePdf = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPdfError(null);
     const f = e.target.files?.[0];
     if (!f) return;
@@ -1050,7 +1196,7 @@ const GalleryStep = ({ form, set, onNext }) => {
       setPdfError(`PDF must be under ${MAX_PDF_SIZE_MB} MB.`);
       return;
     }
-    set((prev) => ({ ...prev, pdf: f, pdfName: f.name }));
+    set((prev: FormType) => ({ ...prev, pdf: f, pdfName: f.name }));
   };
 
   const handleNext = () => {
@@ -1072,7 +1218,7 @@ const GalleryStep = ({ form, set, onNext }) => {
 
         {/* Drop zone */}
         <div
-          onDragOver={(e) => {
+          onDragOver={(e: React.DragEvent<HTMLDivElement>) => {
             e.preventDefault();
             setDragging(true);
           }}
@@ -1120,7 +1266,9 @@ const GalleryStep = ({ form, set, onNext }) => {
             accept="image/jpeg,image/png,image/webp,image/gif"
             multiple
             className="hidden"
-            onChange={(e) => processFiles(e.target.files || [])}
+            onChange={(e) =>
+              processFiles(e.target.files ? Array.from(e.target.files) : [])
+            }
           />
         </div>
 
@@ -1135,7 +1283,7 @@ const GalleryStep = ({ form, set, onNext }) => {
         {/* Preview grid */}
         {form.imagePreviews.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            {form.imagePreviews.map((src, i) => (
+            {form.imagePreviews.map((src: string, i: number) => (
               <div
                 key={i}
                 className="relative group aspect-square rounded-xl overflow-hidden border-2 border-gray-100
@@ -1207,7 +1355,7 @@ const GalleryStep = ({ form, set, onNext }) => {
             </div>
             <button
               onClick={() => {
-                set((f) => ({ ...f, pdf: null, pdfName: "" }));
+                set((f: FormType) => ({ ...f, pdf: null, pdfName: "" }));
                 setPdfError(null);
               }}
               className="w-8 h-8 bg-red-500 text-white rounded-lg flex items-center justify-center
@@ -1284,7 +1432,13 @@ const GalleryStep = ({ form, set, onNext }) => {
 
 // ─── STEP 3: Finish / Preview ─────────────────────────────────────────────────
 
-const FinishStep = ({ form, setStep }) => {
+const FinishStep = ({
+  form,
+  setStep
+}: {
+  form: FormType;
+  setStep: React.Dispatch<React.SetStateAction<number>>;
+}) => {
   const [activeImg, setActiveImg] = useState(0);
 
   const previews =
@@ -1369,7 +1523,7 @@ const FinishStep = ({ form, setStep }) => {
           />
           {previews.length > 1 && (
             <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
-              {previews.map((_, i) => (
+              {previews.map((_: string, i: number) => (
                 <button
                   key={i}
                   onClick={() => setActiveImg(i)}

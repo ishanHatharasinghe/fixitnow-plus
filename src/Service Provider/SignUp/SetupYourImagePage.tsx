@@ -3,15 +3,15 @@ import { useState, useRef } from "react";
 import imageBackground from "../../assets/Backgrounds/Signupscreens3.png";
 
 const SetupYourImagePage = () => {
-  const [profileImage, setProfileImage] = useState(null);
+  const [profileImage, setProfileImage] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState(""); // Validation state
-  const fileInputRef = useRef(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB in bytes
 
   // Validation Logic
-  const validateFile = (file) => {
+  const validateFile = (file: File | null) => {
     if (!file) {
       setError("Please select an image to continue.");
       return false;
@@ -25,8 +25,8 @@ const SetupYourImagePage = () => {
   };
 
   // UI-only Handlers for Drag & Drop
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file) {
       if (validateFile(file)) {
         setProfileImage(file);
@@ -37,17 +37,17 @@ const SetupYourImagePage = () => {
     }
   };
 
-  const handleDragOver = (e) => {
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragOver(true);
   };
 
-  const handleDragLeave = (e) => {
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragOver(false);
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files[0];
@@ -114,7 +114,7 @@ const SetupYourImagePage = () => {
                     ? "border-red-400 bg-red-50"
                     : "border-[#0072D1]/30 bg-white hover:border-[#0072D1] hover:bg-[#F8FAFC]"
                 }`}
-                onClick={() => fileInputRef.current.click()}
+                onClick={() => fileInputRef.current?.click()}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
