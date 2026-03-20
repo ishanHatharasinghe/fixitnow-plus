@@ -1,0 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+@import "tailwindcss";
+@font-face {
+  font-family: 'Rostex';
+  src: url('./assets/fonts/Rostex-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+body {
+  font-family: 'Poppins', sans-serif;
+}
+
+.font-rostex {
+  font-family: 'Rostex', sans-serif !important;
+}
+
