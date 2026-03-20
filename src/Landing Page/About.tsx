@@ -56,7 +56,7 @@ const About = () => {
       <div className="flex flex-col md:flex-row items-center gap-10 md:gap-16 mb-16">
         {/* Left: Text */}
         <div className="flex-1 flex flex-col items-center md:items-start text-center md:text-left">
-          <h2 className="font-rostex text-4xl sm:text-5xl md:text-[70px] font-black uppercase tracking-wide leading-[1.1] mb-6">
+          <h2 className="font-rostex text-4xl sm:text-5xl md:text-[70px]  uppercase tracking-wide leading-[1.1] mb-6">
             <span className="text-[#0072D1]">WHO WE</span>
             <br className="hidden md:block" />
             <span className="text-[#FF5A00]"> ARE ?</span>
