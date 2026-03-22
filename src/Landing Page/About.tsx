@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Search, ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
 
 // Images
@@ -43,12 +44,20 @@ const cardsData = [
 ];
 
 const About = () => {
+  const navigate = useNavigate();
   const [currentCard, setCurrentCard] = useState(0);
 
   const nextCard = () =>
     setCurrentCard((prev) => (prev === cardsData.length - 1 ? 0 : prev + 1));
   const prevCard = () =>
     setCurrentCard((prev) => (prev === 0 ? cardsData.length - 1 : prev - 1));
+
+  const handleContactScroll = () => {
+    const el = document.getElementById("contact");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth" });
+    }
+  };
 
   return (
     <section className="w-full max-w-[1400px] mx-auto px-6 py-12 md:py-20 font-sans">
@@ -82,7 +91,10 @@ const About = () => {
           {/* Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
             {/* Contact Button — border blue, hover bg black */}
-            <button className="relative overflow-hidden flex items-center justify-center gap-3 px-8 py-3.5 rounded-full border-2 border-[#0072D1] bg-white text-[#0072D1] font-bold text-lg transition-all duration-300 hover:bg-black hover:text-white hover:border-black hover:scale-105 w-full sm:w-auto group">
+            <button
+              onClick={handleContactScroll}
+              className="relative overflow-hidden flex items-center justify-center gap-3 px-8 py-3.5 rounded-full border-2 border-[#0072D1] bg-white text-[#0072D1] font-bold text-lg transition-all duration-300 hover:bg-black hover:text-white hover:border-black hover:scale-105 w-full sm:w-auto group"
+            >
               <div className="bg-[#0072D1] text-white rounded-full p-1 group-hover:bg-white group-hover:text-black transition-colors duration-300">
                 <ArrowRight className="w-5 h-5" strokeWidth={3} />
               </div>
@@ -91,7 +103,10 @@ const About = () => {
             </button>
 
             {/* Find Services Button — orange bg, hover bg black */}
-            <button className="relative overflow-hidden flex items-center justify-center gap-3 px-8 py-3.5 rounded-full bg-[#FF5A00] text-white font-bold text-lg shadow-lg transition-all duration-300 hover:bg-black hover:scale-105 w-full sm:w-auto group">
+            <button
+              onClick={() => navigate("/browseplace")}
+              className="relative overflow-hidden flex items-center justify-center gap-3 px-8 py-3.5 rounded-full bg-[#FF5A00] text-white font-bold text-lg shadow-lg transition-all duration-300 hover:bg-black hover:scale-105 w-full sm:w-auto group"
+            >
               <Search className="w-6 h-6" strokeWidth={2.5} />
               Find Services
               <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700 rounded-full" />

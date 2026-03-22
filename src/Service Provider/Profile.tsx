@@ -1,4 +1,14 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import { userService } from "../services/userService";
+import { reviewService } from "../services/reviewService";
+import { postService } from "../services/postService";
+import { notificationService, type AppNotification } from "../services/notificationService";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase";
+import ReviewModal from "../Components/ReviewModal";
+import ReviewsList from "../Components/ReviewsList";
 import {
   Pencil,
   Plus,
@@ -11,138 +21,26 @@ import {
   User,
   Camera,
   X,
-  List
+  List,
+  Edit,
+  Save,
+  Loader,
+  Star,
+  MessageCircle,
+  Bell,
+  CheckCheck,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ProfileTab = "about" | "posts" | "drafts" | "reviews";
+type ProfileTab = "about" | "posts" | "reviews" | "notifications";
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
 const COVER_IMG =
   "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=1200&q=80";
-
-const MOCK_EXTRAS = {
-  includedServices:
-    "Tap repairs, drain cleaning, water tank installation, pipe routing, commode fitting",
-  clientMaterials: "Yes",
-  pricingModel: "Upon Inspection",
-  startingPrice: "LKR 1,500",
-  inspectionFee: "LKR 1,000",
-  specificCities: "Moratuwa, Panadura, Ratmalana",
-  travelDistance: "15 km",
-  availableDays:
-    "Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday",
-  availableHours: "07:00 AM – 07:00 PM",
-  emergency: "Yes"
-};
-
-const POSTS = [
-  {
-    id: 1,
-    status: "Pending Post",
-    title: "Expert House Plumber – Fast Leak Repairs",
-    location: "Location",
-    description:
-      "Professional plumber with 10 years of experience. Specializing in home plumbing, leak repairs, PVC pipe installations, and water pump setups.",
-    phone: "+94 703215789",
-    email: "sample@gmail.com",
-    img: "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&q=80",
-    images: [
-      "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&q=80",
-      "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&q=80",
-      "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&q=80"
-    ],
-    ...MOCK_EXTRAS
-  },
-  {
-    id: 2,
-    status: "Pending Post",
-    title: "Expert House Plumber – Fast Leak Repairs",
-    location: "Location",
-    description:
-      "Professional plumber with 10 years of experience. Specializing in home plumbing, leak repairs, PVC pipe installations, and water pump setups.",
-    phone: "+94 703215789",
-    email: "sample@gmail.com",
-    img: "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&q=80",
-    images: [
-      "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&q=80",
-      "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&q=80",
-      "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&q=80"
-    ],
-    ...MOCK_EXTRAS
-  }
-];
-
-const DRAFTS = [
-  {
-    id: 3,
-    status: "Draft Post",
-    title: "Expert House Plumber – Fast Leak Repairs",
-    location: "Location",
-    description:
-      "Professional plumber with 10 years of experience. Specializing in home plumbing, leak repairs, PVC pipe installations, and water pump setups.",
-    phone: "+94 703215789",
-    email: "sample@gmail.com",
-    img: "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&q=80",
-    images: [
-      "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&q=80"
-    ],
-    ...MOCK_EXTRAS
-  },
-  {
-    id: 4,
-    status: "Draft Post",
-    title: "Expert House Plumber – Fast Leak Repairs",
-    location: "Location",
-    description:
-      "Professional plumber with 10 years of experience. Specializing in home plumbing, leak repairs, PVC pipe installations, and water pump setups.",
-    phone: "+94 703215789",
-    email: "sample@gmail.com",
-    img: "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&q=80",
-    images: [
-      "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&q=80"
-    ],
-    ...MOCK_EXTRAS
-  },
-  {
-    id: 5,
-    status: "Draft Post",
-    title: "Expert House Plumber – Fast Leak Repairs",
-    location: "Location",
-    description:
-      "Professional plumber with 10 years of experience. Specializing in home plumbing, leak repairs, PVC pipe installations, and water pump setups.",
-    phone: "+94 703215789",
-    email: "sample@gmail.com",
-    img: "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&q=80",
-    images: [
-      "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&q=80"
-    ],
-    ...MOCK_EXTRAS
-  }
-];
-
-const REVIEWS = [
-  {
-    id: 1,
-    reviewer: "Adam Sandler",
-    avatar:
-      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80&q=80",
-    time: "1 hour ago",
-    text: "We are so grateful for the incredible wedding photos you captured! Every moment feels alive in the pictures, and we can't stop looking at them. Thank you for making our day so memorable!",
-    likes: "100k"
-  },
-  {
-    id: 2,
-    reviewer: "Adam Sandler",
-    avatar:
-      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80&q=80",
-    time: "1 hour ago",
-    text: "We are so grateful for the incredible wedding photos you captured! Every moment feels alive in the pictures, and we can't stop looking at them. Thank you for making our day so memorable!",
-    likes: "100k"
-  }
-];
 
 // ─── Full Details Modal ───────────────────────────────────────────────────────
 
@@ -173,19 +71,16 @@ const FullDetailsModal = ({
   }, [onClose]);
 
   const details = [
-    { label: "Included Services Checklist", value: card.includedServices },
-    {
-      label: "Requirement of Client Provided Materials",
-      value: card.clientMaterials
-    },
-    { label: "Pricing Model", value: card.pricingModel },
-    { label: "Starting Price", value: card.startingPrice },
-    { label: "Inspection Fee", value: card.inspectionFee },
-    { label: "Specific Cities", value: card.specificCities },
-    { label: "Maximum Travel Distance", value: card.travelDistance },
-    { label: "Available Days", value: card.availableDays },
-    { label: "Available Hours", value: card.availableHours },
-    { label: "Emergency Availability", value: card.emergency }
+    { label: "Included Services Checklist", value: Array.isArray(card.checklist) ? card.checklist.join(", ") : (card.includedServices || "Not specified") },
+    { label: "Requirement of Client Provided Materials", value: card.clientMaterials || "Not specified" },
+    { label: "Pricing Model", value: card.pricingModel || "Not specified" },
+    { label: "Starting Price", value: card.startingPrice ? `LKR ${Number(card.startingPrice).toLocaleString()}` : "Not specified" },
+    { label: "Inspection Fee", value: card.inspectionFee ? `LKR ${Number(card.inspectionFee).toLocaleString()}` : "Not specified" },
+    { label: "Specific Cities", value: card.specificCities || "Not specified" },
+    { label: "Maximum Travel Distance", value: card.travelDistance || "Not specified" },
+    { label: "Available Days", value: Array.isArray(card.availableDays) ? card.availableDays.join(", ") : (card.availableDays || "Not specified") },
+    { label: "Available Hours", value: card.timeFromHour ? `${card.timeFromHour}:00 ${card.timeFromAmPm} – ${card.timeToHour}:00 ${card.timeToAmPm}` : (card.availableHours || "Not specified") },
+    { label: "Emergency Availability", value: card.emergency || "Not specified" }
   ];
 
   return (
@@ -222,25 +117,32 @@ const FullDetailsModal = ({
             {/* LEFT: Image carousel */}
             <div className="w-full md:w-[52%] flex-shrink-0">
               <div className="relative rounded-2xl overflow-hidden bg-gray-100">
-                <img
-                  src={card.images[activeImg]}
-                  alt={card.title}
-                  className="w-full h-56 md:h-[360px] object-cover"
-                />
-                {/* Dot indicators */}
-                {card.images.length > 1 && (
-                  <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
-                    {card.images.map((_: any, i: number) => (
-                      <button
-                        key={i}
-                        onClick={() => setActiveImg(i)}
-                        className={`rounded-full transition-all duration-200 ${
-                          i === activeImg
-                            ? "bg-[#0072D1] w-5 h-2.5"
-                            : "bg-gray-400/70 w-2.5 h-2.5 hover:bg-gray-600"
-                        }`}
-                      />
-                    ))}
+                {card.images && card.images.length > 0 ? (
+                  <>
+                    <img
+                      src={card.images[activeImg]}
+                      alt={card.title}
+                      className="w-full h-56 md:h-[360px] object-cover"
+                    />
+                    {card.images.length > 1 && (
+                      <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
+                        {card.images.map((_: any, i: number) => (
+                          <button
+                            key={i}
+                            onClick={() => setActiveImg(i)}
+                            className={`rounded-full transition-all duration-200 ${
+                              i === activeImg
+                                ? "bg-[#0072D1] w-5 h-2.5"
+                                : "bg-gray-400/70 w-2.5 h-2.5 hover:bg-gray-600"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="w-full h-56 md:h-[360px] flex items-center justify-center bg-gray-100">
+                    <span className="text-sm text-gray-400">No images uploaded</span>
                   </div>
                 )}
               </div>
@@ -277,11 +179,11 @@ const FullDetailsModal = ({
                 <div className="flex flex-wrap items-center gap-5 mb-4">
                   <span className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
                     <Phone className="w-3.5 h-3.5 text-gray-400" />
-                    {card.phone}
+                    +94 {card.mobile || card.phone || "—"}
                   </span>
                   <span className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
                     <Mail className="w-3.5 h-3.5 text-gray-400" />
-                    {card.email}
+                    {card.email || "—"}
                   </span>
                 </div>
               </div>
@@ -297,196 +199,136 @@ const FullDetailsModal = ({
 
 const PostCard = ({
   post,
-  onViewDetails
+  onViewDetails,
+  onEdit,
+  onDelete
 }: {
-  post: (typeof POSTS)[0];
+  post: any;
   onViewDetails: (post: any) => void;
-}) => (
-  <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-    <div className="relative">
-      <img
-        src={post.img}
-        alt={post.title}
-        className="w-full h-44 object-cover"
-      />
-      <span className="absolute top-3 left-3 bg-white text-gray-800 text-xs font-bold px-3 py-1 rounded-full shadow-sm">
-        {post.status}
-      </span>
-    </div>
-    <div className="p-4 border-x border-b border-[#FF5A00]/30 rounded-b-2xl">
-      <h3 className="font-black text-gray-900 text-base leading-snug mb-1">
-        {post.title}
-      </h3>
-      <div className="flex items-center gap-1 text-gray-400 text-xs mb-2">
-        <MapPin className="w-3 h-3 flex-shrink-0" />
-        <span>{post.location}</span>
-      </div>
-      <p className="text-gray-500 text-xs leading-relaxed mb-3">
-        {post.description}
-      </p>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 mb-4">
-        <span className="flex items-center gap-1">
-          <Phone className="w-3 h-3" />
-          {post.phone}
-        </span>
-        <span className="flex items-center gap-1">
-          <Mail className="w-3 h-3" />
-          {post.email}
-        </span>
-      </div>
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => onViewDetails(post)}
-          className="relative overflow-hidden flex-1 bg-[#FF5A00] text-white font-bold text-xs py-2.5 rounded-lg transition-all duration-300 hover:bg-black hover:scale-105 group"
-        >
-          <span className="relative z-10">View Full Details</span>
-          <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-        </button>
-      </div>
-    </div>
-  </div>
-);
+  onEdit: (postId: string) => void;
+  onDelete: (postId: string) => void;
+}) => {
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const menuRef = React.useRef<HTMLDivElement>(null);
 
-// ─── Review Card ──────────────────────────────────────────────────────────────
-
-const ReviewCard = ({ review }: { review: (typeof REVIEWS)[0] }) => (
-  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-    <div className="flex items-start justify-between mb-4">
-      <div className="flex items-center gap-3">
-        <img
-          src={review.avatar}
-          alt={review.reviewer}
-          className="w-11 h-11 rounded-full object-cover flex-shrink-0"
-        />
-        <div>
-          <p className="font-bold text-gray-900 text-sm">{review.reviewer}</p>
-          <p className="text-xs text-gray-400">{review.time}</p>
-        </div>
-      </div>
-      <button className="text-gray-400 hover:text-gray-600 transition-colors">
-        <MoreVertical className="w-4 h-4" />
-      </button>
-    </div>
-    <p className="text-sm text-gray-700 leading-relaxed mb-5">{review.text}</p>
-    <div className="flex items-center justify-between">
-      <button className="flex items-center gap-1.5 text-gray-600 hover:text-red-500 transition-colors">
-        <Heart className="w-4 h-4" />
-        <span className="text-sm font-bold">{review.likes}</span>
-      </button>
-      <button className="flex items-center gap-1.5 text-gray-600 hover:text-[#0072D1] font-bold text-sm transition-colors">
-        Reply <CornerDownLeft className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  </div>
-);
-
-// ─── Add Review Modal ─────────────────────────────────────────────────────────
-
-const AddReviewModal = ({ onClose }: { onClose: () => void }) => {
-  const [name, setName] = React.useState("");
-  const [review, setReview] = React.useState("");
-
-  // Lock body scroll
+  // Close menu when clicking outside
   React.useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
     };
-  }, []);
-
-  // Close on Escape
-  React.useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [onClose]);
-
-  const handleSubmit = () => {
-    if (!name.trim() || !review.trim()) return;
-    // TODO: submit review
-    onClose();
-  };
+    if (menuOpen) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={onClose}
-      />
+    <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+      <div className="relative">
+        {post.images && post.images.length > 0 ? (
+          <img
+            src={post.images[0]}
+            alt={post.title}
+            className="w-full h-44 object-cover"
+          />
+        ) : (
+          <div className="w-full h-44 bg-gray-100 flex items-center justify-center">
+            <span className="text-sm text-gray-400">No image</span>
+          </div>
+        )}
+        {/* Status badge */}
+        <span className={`absolute top-3 left-3 text-xs font-bold px-3 py-1 rounded-full shadow-sm
+          ${post.status === 'approved' ? 'bg-green-100 text-green-800' :
+            post.status === 'rejected' ? 'bg-red-100 text-red-800' :
+            post.status === 'draft' ? 'bg-gray-100 text-gray-800' :
+            'bg-yellow-100 text-yellow-800'}`}>
+          {post.status ? post.status.charAt(0).toUpperCase() + post.status.slice(1) : 'Pending'}
+        </span>
 
-      {/* Modal card — matches screenshot */}
-      <div className="relative z-10 w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 md:p-8">
-        {/* Close button top-right */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 w-9 h-9 rounded-full border-2 border-[#0072D1]
-            flex items-center justify-center text-[#0072D1] hover:bg-[#0072D1] hover:text-white
-            transition-colors"
-        >
-          {/* X inside a circle — matches the ⊗ icon in the screenshot */}
-          <svg
-            viewBox="0 0 24 24"
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
+        {/* ── 3-dot menu ── */}
+        <div className="absolute top-3 right-3" ref={menuRef}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v); }}
+            className="w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm shadow-md
+              flex items-center justify-center hover:bg-white transition-colors"
           >
-            <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
-          </svg>
-        </button>
+            <MoreVertical className="w-4 h-4 text-gray-700" />
+          </button>
 
-        {/* Name field */}
-        <div className="mb-5">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">
-            Name
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder=""
-            className="w-full border border-[#0072D1]/40 rounded-2xl px-4 py-3 text-sm text-gray-700
-              outline-none focus:border-[#0072D1] focus:ring-2 focus:ring-[#0072D1]/15
-              transition-colors bg-gray-50"
-          />
+          {menuOpen && (
+            <div className="absolute right-0 top-10 w-40 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-20">
+              {/* Edit — available for all statuses */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  onEdit(post.id);
+                }}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-bold
+                  text-gray-700 hover:bg-[#0072D1]/10 hover:text-[#0072D1] transition-colors text-left"
+              >
+                <Edit className="w-4 h-4" />
+                Edit & Resubmit
+              </button>
+              {/* Delete */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  onDelete(post.id);
+                }}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-bold
+                  text-red-600 hover:bg-red-50 transition-colors text-left border-t border-gray-100"
+              >
+                <X className="w-4 h-4" />
+                Delete Post
+              </button>
+            </div>
+          )}
         </div>
+      </div>
 
-        {/* Review field */}
-        <div className="mb-7">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">
-            Review
-          </label>
-          <textarea
-            value={review}
-            onChange={(e) => setReview(e.target.value)}
-            rows={5}
-            placeholder=""
-            className="w-full border border-[#0072D1]/40 rounded-2xl px-4 py-3 text-sm text-gray-700
-              outline-none focus:border-[#0072D1] focus:ring-2 focus:ring-[#0072D1]/15
-              transition-colors bg-gray-50 resize-none"
-          />
+      <div className="p-4 border-x border-b border-[#FF5A00]/30 rounded-b-2xl">
+        <h3 className="font-black text-gray-900 text-base leading-snug mb-1">
+          {post.title}
+        </h3>
+        <div className="flex items-center gap-1 text-gray-400 text-xs mb-2">
+          <MapPin className="w-3 h-3 flex-shrink-0" />
+          <span>{post.location}</span>
         </div>
-
-        {/* Add Review button */}
-        <button
-          onClick={handleSubmit}
-          className="relative overflow-hidden w-full bg-[#0072D1] text-white font-bold
-            py-3.5 rounded-2xl text-sm transition-all duration-300 hover:bg-black
-            hover:scale-[1.01] group shadow-md"
-        >
-          <span className="relative z-10">Add Review</span>
-          <div
-            className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full
-            group-hover:translate-x-full transition-transform duration-700 rounded-2xl"
-          />
-        </button>
+        {post.status === 'rejected' && post.rejectionReason && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-2 mb-2">
+            <p className="text-xs font-bold text-red-600 mb-0.5">Rejection Reason:</p>
+            <p className="text-xs text-red-600">{post.rejectionReason}</p>
+          </div>
+        )}
+        <p className="text-gray-500 text-xs leading-relaxed mb-3 line-clamp-3">
+          {post.description || "No description provided"}
+        </p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 mb-4">
+          <span className="flex items-center gap-1">
+            <Phone className="w-3 h-3" />
+            +94 {post.mobile}
+          </span>
+          <span className="flex items-center gap-1">
+            <Mail className="w-3 h-3" />
+            {post.email}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => onViewDetails(post)}
+            className="relative overflow-hidden flex-1 bg-[#FF5A00] text-white font-bold text-xs py-2.5 rounded-lg transition-all duration-300 hover:bg-black hover:scale-105 group"
+          >
+            <span className="relative z-10">View Full Details</span>
+            <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+          </button>
+        </div>
       </div>
     </div>
   );
 };
+
 
 // ─── Pagination ───────────────────────────────────────────────────────────────
 
@@ -533,7 +375,7 @@ const Pagination = ({
 
 // ─── About Panel (sidebar on desktop, tab content on mobile) ──────────────────
 
-const AboutPanel = () => (
+const AboutPanel = ({ providerData, loading, error }: { providerData: any; loading: boolean; error: string | null }) => (
   <div className="space-y-4">
     <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
       <div className="flex items-center justify-between mb-3">
@@ -541,10 +383,7 @@ const AboutPanel = () => (
         <User className="w-5 h-5 text-gray-400" />
       </div>
       <p className="text-xs text-gray-600 leading-relaxed">
-        Lorem Ipsum is simply dummy text of the printing and typesetting
-        industry. Lorem Ipsum has been the industry's standard dummy text ever
-        since the 1500s, when an unknown printer took a galley of type and
-        scrambled it to make a type specimen book.
+        {providerData?.bio || 'Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry\'s standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book.'}
       </p>
     </div>
     <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
@@ -553,26 +392,306 @@ const AboutPanel = () => (
         <MapPin className="w-5 h-5 text-gray-400" />
       </div>
       <p className="text-xs text-gray-600 leading-relaxed">
-        Level 5, Hemas House No 75 Bray-brooke place, Colombo 02
+        {providerData?.address 
+          ? typeof providerData.address === 'string' 
+            ? providerData.address 
+            : `${providerData.address.street || ''}, ${providerData.address.city || ''}, ${providerData.address.country || ''}`
+          : 'Level 5, Hemas House No 75 Bray-brooke place, Colombo 02'
+        }
       </p>
     </div>
+    <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-bold text-gray-900 text-sm">Available Services</h3>
+        <List className="w-5 h-5 text-gray-400" />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {providerData?.availableServices && providerData.availableServices.length > 0 ? (
+          providerData.availableServices.map((service: string, index: number) => (
+            <span key={index} className="px-2 py-1 bg-[#0072D1]/10 text-[#0072D1] text-xs rounded-full">
+              {service}
+            </span>
+          ))
+        ) : (
+          <span className="px-2 py-1 bg-gray-200 text-gray-500 text-xs rounded-full">
+            No services listed
+          </span>
+        )}
+      </div>
+    </div>
+    <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-bold text-gray-900 text-sm">Contact</h3>
+        <Phone className="w-5 h-5 text-gray-400" />
+      </div>
+      <div className="space-y-1">
+        <p className="text-xs text-gray-600">
+          <span className="font-bold">Phone:</span> {providerData?.phoneNumber || 'Not provided'}
+        </p>
+        <p className="text-xs text-gray-600">
+          <span className="font-bold">Email:</span> {providerData?.email || 'Not provided'}
+        </p>
+      </div>
+    </div>
     <p className="text-xs font-bold text-gray-600 px-1">
-      Member since : December 28, 2018
+      Member since : {providerData?.createdAt ? new Date(providerData.createdAt).toLocaleDateString() : 'December 28, 2018'}
     </p>
   </div>
 );
 
+// ─── Notifications Panel ──────────────────────────────────────────────────────
+
+const NotificationsPanel = ({
+  notifications,
+  loading,
+  onMarkAllRead,
+  onMarkOneRead,
+}: {
+  notifications: AppNotification[];
+  loading: boolean;
+  onMarkAllRead: () => void;
+  onMarkOneRead: (id: string) => void;
+}) => {
+  const unread = notifications.filter((n) => !n.read).length;
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-16">
+        <Loader className="w-6 h-6 animate-spin text-[#0072D1]" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Bell className="w-5 h-5 text-[#0072D1]" />
+          <h3 className="font-black text-gray-900 text-base">Notifications</h3>
+          {unread > 0 && (
+            <span className="bg-[#FF5A00] text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+              {unread} unread
+            </span>
+          )}
+        </div>
+        {unread > 0 && (
+          <button
+            onClick={onMarkAllRead}
+            className="flex items-center gap-1.5 text-xs text-[#0072D1] font-bold hover:underline"
+          >
+            <CheckCheck className="w-3.5 h-3.5" />
+            Mark all as read
+          </button>
+        )}
+      </div>
+
+      {/* Empty state */}
+      {notifications.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+            <Bell className="w-7 h-7 text-gray-300" />
+          </div>
+          <p className="font-bold text-gray-500 mb-1">No notifications yet</p>
+          <p className="text-sm text-center max-w-xs">
+            You'll receive notifications here when your posts are approved or rejected.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {notifications.map((notif) => (
+            <div
+              key={notif.id}
+              onClick={() => { if (!notif.read) onMarkOneRead(notif.id); }}
+              className={`flex items-start gap-4 p-4 rounded-2xl border transition-all cursor-pointer hover:shadow-sm
+                ${!notif.read
+                  ? "bg-[#0072D1]/5 border-[#0072D1]/20 hover:bg-[#0072D1]/8"
+                  : "bg-white border-gray-100 hover:bg-gray-50"
+                }`}
+            >
+              {/* Status icon */}
+              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center
+                ${notif.type === "post_approved" ? "bg-green-100" : "bg-red-100"}`}>
+                {notif.type === "post_approved"
+                  ? <CheckCircle className="w-5 h-5 text-green-600" />
+                  : <XCircle className="w-5 h-5 text-red-500" />
+                }
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className={`text-sm font-bold leading-snug
+                    ${notif.type === "post_approved" ? "text-green-700" : "text-red-600"}`}>
+                    {notif.title}
+                  </p>
+                  {!notif.read && (
+                    <span className="flex-shrink-0 w-2.5 h-2.5 rounded-full bg-[#FF5A00] mt-1" />
+                  )}
+                </div>
+                <p className="text-xs text-gray-600 mt-1 leading-relaxed">{notif.message}</p>
+                <p className="text-[11px] text-gray-400 mt-2 font-medium">
+                  {notif.createdAt.toLocaleDateString(undefined, {
+                    year: "numeric", month: "short", day: "numeric",
+                    hour: "2-digit", minute: "2-digit",
+                  })}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const UserProfile: React.FC = () => {
+  const { currentUser, userProfile } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<ProfileTab>("about");
   const [page, setPage] = useState(1);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [coverSrc, setCoverSrc] = useState<string>(COVER_IMG);
   const [profileImageSrc, setProfileImageSrc] = useState<string>("");
   const [selectedPost, setSelectedPost] = useState<any>(null); // State for the full details modal
+  const [isEditing, setIsEditing] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    displayName: userProfile?.displayName || "",
+    phoneNumber: userProfile?.phoneNumber || "",
+    address: userProfile?.address || "",
+    nic: userProfile?.nic || ""
+  });
+  const [saving, setSaving] = useState(false);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(true);
+  const [averageRating, setAverageRating] = useState<number>(0);
+  const [providerData, setProviderData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Real posts from Firestore
+  const [providerPosts, setProviderPosts] = useState<any[]>([]);
+  const [loadingPosts, setLoadingPosts] = useState(true);
   const coverRef = React.useRef<HTMLInputElement>(null);
   const profileImageRef = React.useRef<HTMLInputElement>(null);
+
+  // ── Notifications ─────────────────────────────────────────────────────────
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
+
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setNotifications([]);
+      setLoadingNotifications(false);
+      return;
+    }
+    setLoadingNotifications(true);
+    const unsub = notificationService.subscribeToNotifications(
+      currentUser.uid,
+      (notifs) => {
+        setNotifications(notifs);
+        setLoadingNotifications(false);
+      }
+    );
+    return () => unsub();
+  }, [currentUser?.uid]);
+
+  const unreadNotifCount = notifications.filter((n) => !n.read).length;
+
+  const handleMarkAllRead = async () => {
+    if (!currentUser?.uid) return;
+    try {
+      await notificationService.markAllAsRead(currentUser.uid);
+    } catch (err) {
+      console.error("Failed to mark all notifications as read:", err);
+    }
+  };
+
+  const handleMarkOneRead = async (notifId: string) => {
+    try {
+      await notificationService.markAsRead(notifId);
+    } catch (err) {
+      console.error("Failed to mark notification as read:", err);
+    }
+  };
+
+  // Fetch provider's own posts from Firestore
+  useEffect(() => {
+    const fetchProviderPosts = async () => {
+      if (!currentUser?.uid) return;
+      try {
+        setLoadingPosts(true);
+        const allPosts = await postService.getPostsByServiceProvider(currentUser.uid);
+        // Posts tab: all non-draft posts
+        setProviderPosts(allPosts.filter(p => p.status !== 'draft'));
+      } catch (err) {
+        console.error('Error fetching provider posts:', err);
+      } finally {
+        setLoadingPosts(false);
+      }
+    };
+    fetchProviderPosts();
+  }, [currentUser?.uid]);
+
+  // Fetch provider data from Firestore
+  useEffect(() => {
+    const fetchProviderData = async () => {
+      if (!currentUser?.uid) return;
+      
+      try {
+        setLoading(true);
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        if (userDoc.exists()) {
+          setProviderData(userDoc.data());
+        } else {
+          setError('Provider data not found');
+        }
+      } catch (err) {
+        console.error('Error fetching provider data:', err);
+        setError('Failed to load provider data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProviderData();
+  }, [currentUser?.uid]);
+
+  // Fetch reviews and average rating for the service provider
+  useEffect(() => {
+    const fetchReviews = async () => {
+      if (!currentUser) return;
+      
+      try {
+        setLoadingReviews(true);
+        const serviceProviderReviews = await reviewService.getReviewsByServiceProvider(currentUser.uid);
+        setReviews(serviceProviderReviews);
+        
+        // Calculate average rating
+        const stats = await reviewService.getReviewStats(currentUser.uid);
+        setAverageRating(stats.averageRating);
+      } catch (error) {
+        console.error('Error fetching reviews:', error);
+      } finally {
+        setLoadingReviews(false);
+      }
+    };
+
+    fetchReviews();
+  }, [currentUser]);
+
+  // Update edit form when userProfile changes
+  useEffect(() => {
+    if (userProfile) {
+      setEditFormData({
+        displayName: userProfile.displayName || "",
+        phoneNumber: userProfile.phoneNumber || "",
+        address: userProfile.address || "",
+        nic: userProfile.nic || ""
+      });
+    }
+  }, [userProfile]);
 
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -584,11 +703,33 @@ const UserProfile: React.FC = () => {
     if (f) setProfileImageSrc(URL.createObjectURL(f));
   };
 
+  // Navigate to the add-post page (only existing post form in the app)
+  const handleEditPost = (postId: string) => {
+  navigate(`/add-post/${postId}`);
+};
+
+  // Delete a post and remove it from local state
+  const handleDeletePost = async (postId: string) => {
+    if (!window.confirm("Are you sure you want to delete this post? This cannot be undone.")) return;
+    try {
+      await postService.deletePost(postId);
+      setProviderPosts(prev => prev.filter(p => p.id !== postId));
+    } catch (err) {
+      console.error("Error deleting post:", err);
+      alert("Failed to delete post. Please try again.");
+    }
+  };
+
+  // Navigate to edit profile page
+  const handleEditProfileClick = () => {
+    navigate('/edit-profile');
+  };
+
   const TABS: { key: ProfileTab; label: string }[] = [
     { key: "about", label: "About" },
     { key: "posts", label: "Posts" },
-    { key: "drafts", label: "Drafts" },
-    { key: "reviews", label: "Reviews" }
+    { key: "reviews", label: "Reviews" },
+    { key: "notifications", label: "Notifications" },
   ];
 
   const rightBtnLabel = tab === "reviews" ? "Add Review" : "Add New Post";
@@ -666,10 +807,24 @@ const UserProfile: React.FC = () => {
         {/* LEFT sidebar */}
         <aside className="w-64 flex-shrink-0">
           <div className="text-center mb-5">
-            <h2 className="text-xl font-black text-gray-900">Full Name</h2>
-            <p className="text-lg font-black text-gray-900">Plumber</p>
+            {loading ? (
+              <div className="flex items-center justify-center h-16">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#0072D1]"></div>
+              </div>
+            ) : error ? (
+              <p className="text-red-500 text-sm">{error}</p>
+            ) : (
+              <>
+                <h2 className="text-xl font-black text-gray-900">
+                  {providerData?.firstName || 'Full Name'} {providerData?.lastName || ''}
+                </h2>
+                <p className="text-lg font-black text-gray-900">
+                  {providerData?.availableServices?.[0] || 'Plumber'}
+                </p>
+              </>
+            )}
           </div>
-          <AboutPanel />
+          <AboutPanel providerData={providerData} loading={loading} error={error} />
         </aside>
 
         {/* RIGHT content */}
@@ -677,7 +832,7 @@ const UserProfile: React.FC = () => {
           {/* Tab bar + buttons */}
           <div className="flex items-center justify-between border-b border-gray-200 mb-6">
             <div className="flex">
-              {/* Desktop shows Posts / Drafts / Reviews only (About is always in sidebar) */}
+              {/* Desktop shows Posts / Reviews / Notifications (About is always in sidebar) */}
               {TABS.filter((t) => t.key !== "about").map((t) => (
                 <button
                   key={t.key}
@@ -685,7 +840,7 @@ const UserProfile: React.FC = () => {
                     setTab(t.key);
                     setPage(1);
                   }}
-                  className={`px-5 py-3 text-sm font-bold border-b-2 transition-all
+                  className={`relative px-5 py-3 text-sm font-bold border-b-2 transition-all
                     ${
                       tab === t.key
                         ? "text-gray-900 border-gray-900"
@@ -693,11 +848,17 @@ const UserProfile: React.FC = () => {
                     }`}
                 >
                   {t.label}
+                  {t.key === "notifications" && unreadNotifCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] bg-[#FF5A00] text-white text-[9px] font-black rounded-full flex items-center justify-center px-1">
+                      {unreadNotifCount}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
             <div className="flex items-center gap-3 pb-1">
               <button
+                onClick={handleEditProfileClick}
                 className="relative overflow-hidden flex items-center gap-1.5 bg-[#0072D1] text-white text-xs
                 font-bold px-4 py-2.5 rounded-xl transition-all duration-300 hover:bg-black hover:scale-105 group"
               >
@@ -705,71 +866,66 @@ const UserProfile: React.FC = () => {
                 <span className="relative z-10">Edit Profile</span>
                 <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
               </button>
-              <button
-                onClick={() => {
-                  if (tab === "reviews") setShowReviewModal(true);
-                }}
-                className="relative overflow-hidden flex items-center gap-1.5 bg-black text-white text-xs
-                font-bold px-4 py-2.5 rounded-xl transition-all duration-300 hover:bg-[#0072D1] hover:scale-105 group"
-              >
-                <Plus className="w-3.5 h-3.5 relative z-10" />
-                <span className="relative z-10">{rightBtnLabel}</span>
-                <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-              </button>
+              {tab !== "notifications" && (
+                <button
+                  onClick={() => {
+                    if (tab === "reviews") setShowReviewModal(true);
+                    else navigate('/add-post');
+                  }}
+                  className="relative overflow-hidden flex items-center gap-1.5 bg-black text-white text-xs
+                  font-bold px-4 py-2.5 rounded-xl transition-all duration-300 hover:bg-[#0072D1] hover:scale-105 group"
+                >
+                  <Plus className="w-3.5 h-3.5 relative z-10" />
+                  <span className="relative z-10">{rightBtnLabel}</span>
+                  <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                </button>
+              )}
             </div>
           </div>
 
           {/* Posts */}
           {(tab === "posts" || tab === "about") && (
             <>
-              <div className="grid grid-cols-2 gap-5">
-                {POSTS.map((p) => (
-                  <PostCard
-                    key={p.id}
-                    post={p}
-                    onViewDetails={setSelectedPost}
-                  />
-                ))}
-              </div>
-              <Pagination current={page} total={3} onChange={setPage} />
-            </>
-          )}
-
-          {/* Drafts */}
-          {tab === "drafts" && (
-            <>
-              <div className="grid grid-cols-2 gap-5">
-                {DRAFTS.slice(0, 2).map((p) => (
-                  <PostCard
-                    key={p.id}
-                    post={p}
-                    onViewDetails={setSelectedPost}
-                  />
-                ))}
-              </div>
-              <Pagination current={page} total={3} onChange={setPage} />
+              {loadingPosts ? (
+                <div className="flex justify-center py-12">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#0072D1]"></div>
+                </div>
+              ) : providerPosts.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <p className="font-bold text-gray-600 mb-1">No posts yet</p>
+                  <p className="text-sm">Create your first service listing to get started.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-5">
+                  {providerPosts.map((p) => (
+                    <PostCard key={p.id} post={p} onViewDetails={setSelectedPost} onEdit={handleEditPost} onDelete={handleDeletePost} />
+                  ))}
+                </div>
+              )}
+              <Pagination current={page} total={Math.max(1, Math.ceil(providerPosts.length / 6))} onChange={setPage} />
             </>
           )}
 
           {/* Reviews */}
           {tab === "reviews" && (
             <>
-              <button
-                onClick={() => setShowReviewModal(true)}
-                className="relative overflow-hidden w-full flex items-center justify-center gap-2 bg-black text-white
-                  font-bold py-3.5 rounded-xl transition-all duration-300 hover:bg-[#0072D1] hover:scale-[1.01] group text-sm mb-5 shadow-sm"
-              >
-                <Plus className="w-4 h-4 relative z-10" />
-                <span className="relative z-10">Add Review</span>
-                <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-              </button>
-              <div className="grid grid-cols-2 gap-5">
-                {REVIEWS.map((r) => (
-                  <ReviewCard key={r.id} review={r} />
-                ))}
-              </div>
-              <Pagination current={page} total={3} onChange={setPage} />
+              <ReviewsList
+                serviceProviderId={currentUser?.uid || ""}
+                reviews={reviews}
+                onAddReview={() => setShowReviewModal(true)}
+                loading={loadingReviews}
+              />
             </>
+          )}
+
+          {/* Notifications */}
+          {tab === "notifications" && (
+            <NotificationsPanel
+              notifications={notifications}
+              loading={loadingNotifications}
+              onMarkAllRead={handleMarkAllRead}
+              onMarkOneRead={handleMarkOneRead}
+            />
           )}
         </div>
       </div>
@@ -778,20 +934,31 @@ const UserProfile: React.FC = () => {
       <div className="md:hidden">
         {/* Name + Edit Profile */}
         <div className="flex flex-col items-center pt-14 pb-3 px-4">
-          <h2 className="text-base font-black text-gray-900">
-            Full Name <span className="font-black">(Plumber)</span>
-          </h2>
-          <button
-            className="relative overflow-hidden mt-2 flex items-center gap-1.5 bg-[#0072D1] text-white
-            text-xs font-bold px-4 py-2 rounded-xl transition-all duration-300 hover:bg-black hover:scale-105 group"
-          >
-            <Pencil className="w-3 h-3 relative z-10" />
-            <span className="relative z-10">Edit Profile</span>
-            <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-          </button>
+          {loading ? (
+            <div className="flex items-center justify-center h-12">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#0072D1]"></div>
+            </div>
+          ) : error ? (
+            <p className="text-red-500 text-sm">{error}</p>
+          ) : (
+            <>
+              <h2 className="text-base font-black text-gray-900">
+                {providerData?.firstName || 'Full Name'} {providerData?.lastName || ''} <span className="font-black">({providerData?.availableServices?.[0] || 'Plumber'})</span>
+              </h2>
+              <button
+                onClick={handleEditProfileClick}
+                className="relative overflow-hidden mt-2 flex items-center gap-1.5 bg-[#0072D1] text-white
+                text-xs font-bold px-4 py-2 rounded-xl transition-all duration-300 hover:bg-black hover:scale-105 group"
+              >
+                <Pencil className="w-3 h-3 relative z-10" />
+                <span className="relative z-10">Edit Profile</span>
+                <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+              </button>
+            </>
+          )}
         </div>
 
-        {/* Mobile tabs — About / Posts / Drafts / Reviews */}
+        {/* Mobile tabs — About / Posts / Reviews / Notifications */}
         <div className="flex border-b border-gray-200">
           {TABS.map((t) => (
             <button
@@ -800,7 +967,7 @@ const UserProfile: React.FC = () => {
                 setTab(t.key);
                 setPage(1);
               }}
-              className={`flex-1 py-3 text-xs font-bold border-b-2 transition-all
+              className={`relative flex-1 py-3 text-xs font-bold border-b-2 transition-all
                 ${
                   tab === t.key
                     ? "text-[#0072D1] border-[#0072D1]"
@@ -808,6 +975,11 @@ const UserProfile: React.FC = () => {
                 }`}
             >
               {t.label}
+              {t.key === "notifications" && unreadNotifCount > 0 && (
+                <span className="absolute top-1.5 right-1 min-w-[15px] h-[15px] bg-[#FF5A00] text-white text-[8px] font-black rounded-full flex items-center justify-center px-0.5">
+                  {unreadNotifCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -815,12 +987,13 @@ const UserProfile: React.FC = () => {
         {/* Mobile tab content */}
         <div className="px-4 pt-4 pb-12 space-y-4">
           {/* About tab */}
-          {tab === "about" && <AboutPanel />}
+          {tab === "about" && <AboutPanel providerData={providerData} loading={loading} error={error} />}
 
           {/* Posts tab */}
           {tab === "posts" && (
             <>
               <button
+                onClick={() => navigate('/add-post')}
                 className="relative overflow-hidden w-full flex items-center justify-center gap-2 bg-black text-white
                 font-bold py-3.5 rounded-xl transition-all duration-300 hover:bg-[#0072D1] hover:scale-[1.01] group text-sm shadow-sm"
               >
@@ -828,48 +1001,44 @@ const UserProfile: React.FC = () => {
                 <span className="relative z-10">Add New Post</span>
                 <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
               </button>
-              {POSTS.map((p) => (
-                <PostCard key={p.id} post={p} onViewDetails={setSelectedPost} />
-              ))}
-              <Pagination current={page} total={3} onChange={setPage} />
-            </>
-          )}
-
-          {/* Drafts tab */}
-          {tab === "drafts" && (
-            <>
-              <button
-                className="relative overflow-hidden w-full flex items-center justify-center gap-2 bg-black text-white
-                font-bold py-3.5 rounded-xl transition-all duration-300 hover:bg-[#0072D1] hover:scale-[1.01] group text-sm shadow-sm"
-              >
-                <Plus className="w-4 h-4 relative z-10" />
-                <span className="relative z-10">Add New Post</span>
-                <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-              </button>
-              {DRAFTS.map((p) => (
-                <PostCard key={p.id} post={p} onViewDetails={setSelectedPost} />
-              ))}
-              <Pagination current={page} total={3} onChange={setPage} />
+              {loadingPosts ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#0072D1]"></div>
+                </div>
+              ) : providerPosts.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <p className="font-bold text-gray-600 mb-1">No posts yet</p>
+                  <p className="text-sm">Create your first service listing.</p>
+                </div>
+              ) : (
+                providerPosts.map((p) => (
+                  <PostCard key={p.id} post={p} onViewDetails={setSelectedPost} onEdit={handleEditPost} onDelete={handleDeletePost} />
+                ))
+              )}
+              <Pagination current={page} total={Math.max(1, Math.ceil(providerPosts.length / 6))} onChange={setPage} />
             </>
           )}
 
           {/* Reviews tab */}
           {tab === "reviews" && (
             <>
-              <button
-                onClick={() => setShowReviewModal(true)}
-                className="relative overflow-hidden w-full flex items-center justify-center gap-2 bg-black text-white
-                  font-bold py-3.5 rounded-xl transition-all duration-300 hover:bg-[#0072D1] hover:scale-[1.01] group text-sm shadow-sm"
-              >
-                <Plus className="w-4 h-4 relative z-10" />
-                <span className="relative z-10">Add Review</span>
-                <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-              </button>
-              {REVIEWS.map((r) => (
-                <ReviewCard key={r.id} review={r} />
-              ))}
-              <Pagination current={page} total={3} onChange={setPage} />
+              <ReviewsList
+                serviceProviderId={currentUser?.uid || ""}
+                reviews={reviews}
+                onAddReview={() => setShowReviewModal(true)}
+                loading={loadingReviews}
+              />
             </>
+          )}
+
+          {/* Notifications tab */}
+          {tab === "notifications" && (
+            <NotificationsPanel
+              notifications={notifications}
+              loading={loadingNotifications}
+              onMarkAllRead={handleMarkAllRead}
+              onMarkOneRead={handleMarkOneRead}
+            />
           )}
         </div>
         {/* end mobile tab content */}

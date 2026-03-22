@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   SlidersHorizontal,
@@ -13,6 +14,9 @@ import {
 } from "lucide-react";
 
 import SampleImg from "../assets/About Section/img1.webp";
+import Footer from "../Components/Footer";
+import { postService } from "../services/postService";
+import ReviewModal from "../Components/ReviewModal";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -70,48 +74,19 @@ const locationData = [
   }
 ];
 
-// ─── Sample service cards data ────────────────────────────────────────────────
-
-const sampleCards = Array(6)
-  .fill(null)
-  .map((_, i) => ({
-    id: i + 1,
-    title: "Expert House Plumber – Fast Leak Repairs",
-    location: "Location",
-    description:
-      "Professional plumber with 10 years of experience. Specializing in home plumbing, leak repairs, PVC pipe installations, and water pump setups.",
-    phone: "+94 703215789",
-    email: "sample@gmail.com",
-    img: SampleImg,
-    // Full detail fields (matching the screenshot)
-    includedServices:
-      "Tap repairs, drain cleaning, water tank installation, pipe routing, commode fitting",
-    clientMaterials: "Yes",
-    pricingModel: "Upon Inspection",
-    startingPrice: "LKR 1,500",
-    inspectionFee: "LKR 1,000",
-    specificCities: "Moratuwa, Panadura, Ratmalana",
-    travelDistance: "15 km",
-    availableDays:
-      "Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday",
-    availableHours: "07:00 AM – 07:00 PM",
-    emergency: "Yes",
-    // Multiple images for carousel
-    images: [SampleImg, SampleImg, SampleImg, SampleImg, SampleImg]
-  }));
-
 // ─── Full Details Modal ───────────────────────────────────────────────────────
 
 const FullDetailsModal = ({
   card,
-  onClose
+  onClose,
+  onNavigateToProvider
 }: {
   card: any;
   onClose: () => void;
+  onNavigateToProvider: (serviceProviderId: string) => void;
 }) => {
   const [activeImg, setActiveImg] = useState(0);
 
-  // Prevent body scroll when modal is open
   useEffect(() => {
     document.body.style.overflow = "hidden";
     return () => {
@@ -119,7 +94,6 @@ const FullDetailsModal = ({
     };
   }, []);
 
-  // Close on Escape key
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -129,19 +103,16 @@ const FullDetailsModal = ({
   }, [onClose]);
 
   const details = [
-    { label: "Included Services Checklist", value: card.includedServices },
-    {
-      label: "Requirement of Client Provided Materials",
-      value: card.clientMaterials
-    },
-    { label: "Pricing Model", value: card.pricingModel },
-    { label: "Starting Price", value: card.startingPrice },
-    { label: "Inspection Fee", value: card.inspectionFee },
-    { label: "Specific Cities", value: card.specificCities },
-    { label: "Maximum Travel Distance", value: card.travelDistance },
-    { label: "Available Days", value: card.availableDays },
-    { label: "Available Hours", value: card.availableHours },
-    { label: "Emergency Availability", value: card.emergency }
+    { label: "Included Services Checklist", value: Array.isArray(card.checklist) ? card.checklist.join(", ") : (card.includedServices || "Not specified") },
+    { label: "Requirement of Client Provided Materials", value: card.clientMaterials || "Not specified" },
+    { label: "Pricing Model", value: card.pricingModel || "Not specified" },
+    { label: "Starting Price", value: card.startingPrice ? `LKR ${Number(card.startingPrice).toLocaleString()}` : "Not specified" },
+    { label: "Inspection Fee", value: card.inspectionFee ? `LKR ${Number(card.inspectionFee).toLocaleString()}` : "Not specified" },
+    { label: "Specific Cities", value: card.specificCities || "Not specified" },
+    { label: "Maximum Travel Distance", value: card.travelDistance || "Not specified" },
+    { label: "Available Days", value: Array.isArray(card.availableDays) ? card.availableDays.join(", ") : (card.availableDays || "Not specified") },
+    { label: "Available Hours", value: card.timeFromHour ? `${card.timeFromHour}:00 ${card.timeFromAmPm} – ${card.timeToHour}:00 ${card.timeToAmPm}` : (card.availableHours || "Not specified") },
+    { label: "Emergency Availability", value: card.emergency || "Not specified" }
   ];
 
   return (
@@ -152,7 +123,7 @@ const FullDetailsModal = ({
         onClick={onClose}
       />
 
-      {/* Modal card — matches the screenshot layout */}
+      {/* Modal card */}
       <div className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-[#0072D1]/30 overflow-hidden max-h-[90vh] flex flex-col">
         {/* Close button */}
         <button
@@ -164,7 +135,6 @@ const FullDetailsModal = ({
 
         {/* Scrollable content */}
         <div className="overflow-y-auto flex-1 p-6 md:p-8">
-          {/* Title + location */}
           <h2 className="font-black text-gray-900 text-xl md:text-2xl leading-tight mb-1 pr-8">
             {card.title}
           </h2>
@@ -173,41 +143,44 @@ const FullDetailsModal = ({
             <span className="text-sm font-medium">{card.location}</span>
           </div>
 
-          {/* Main content: image left + details right (desktop) / stacked (mobile) */}
           <div className="flex flex-col md:flex-row gap-6 md:gap-8">
             {/* LEFT: Image carousel */}
             <div className="w-full md:w-[52%] flex-shrink-0">
               <div className="relative rounded-2xl overflow-hidden bg-gray-100">
-                <img
-                  src={card.images[activeImg]}
-                  alt={card.title}
-                  className="w-full h-56 md:h-[360px] object-cover"
-                />
-                {/* Dot indicators */}
-                {card.images.length > 1 && (
-                  <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
-                    {card.images.map((_: any, i: number) => (
-                      <button
-                        key={i}
-                        onClick={() => setActiveImg(i)}
-                        className={`rounded-full transition-all duration-200 ${
-                          i === activeImg
-                            ? "bg-[#0072D1] w-5 h-2.5"
-                            : "bg-gray-400/70 w-2.5 h-2.5 hover:bg-gray-600"
-                        }`}
-                      />
-                    ))}
+                {card.images && card.images.length > 0 ? (
+                  <>
+                    <img
+                      src={card.images[activeImg]}
+                      alt={card.title}
+                      className="w-full h-56 md:h-[360px] object-cover"
+                    />
+                    {card.images.length > 1 && (
+                      <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
+                        {card.images.map((_: any, i: number) => (
+                          <button
+                            key={i}
+                            onClick={() => setActiveImg(i)}
+                            className={`rounded-full transition-all duration-200 ${
+                              i === activeImg
+                                ? "bg-[#0072D1] w-5 h-2.5"
+                                : "bg-gray-400/70 w-2.5 h-2.5 hover:bg-gray-600"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="w-full h-56 md:h-[360px] flex items-center justify-center">
+                    <span className="text-sm text-gray-400">No images uploaded</span>
                   </div>
                 )}
               </div>
 
-              {/* Details section below image */}
               <div className="mt-5">
                 <div className="flex items-center gap-2 mb-2">
                   <List className="w-4 h-4 text-gray-600" />
-                  <h3 className="font-black text-gray-800 text-base">
-                    Details
-                  </h3>
+                  <h3 className="font-black text-gray-800 text-base">Details</h3>
                 </div>
                 <p className="text-sm text-gray-600 leading-relaxed">
                   {card.description}
@@ -233,16 +206,24 @@ const FullDetailsModal = ({
                 <div className="flex flex-wrap items-center gap-5 mb-4">
                   <span className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
                     <Phone className="w-3.5 h-3.5 text-gray-400" />
-                    {card.phone}
+                    +94 {card.mobile || card.phone || "—"}
                   </span>
                   <span className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
                     <Mail className="w-3.5 h-3.5 text-gray-400" />
-                    {card.email}
+                    {card.email || "—"}
                   </span>
                 </div>
                 <div className="flex justify-end">
-                  <button className="text-[#FF5A00] font-bold text-sm hover:text-black transition-colors">
-                    View Service Owner
+                  <button
+                    onClick={() => {
+                      if (card.serviceProviderId) {
+                        onNavigateToProvider(card.serviceProviderId);
+                        onClose();
+                      }
+                    }}
+                    className="text-[#FF5A00] font-bold text-sm hover:text-black transition-colors"
+                  >
+                    View Service Owner →
                   </button>
                 </div>
               </div>
@@ -288,7 +269,7 @@ const ServiceCard = ({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
         <div className="flex items-center gap-1 text-gray-600">
           <Phone className="w-3 h-3 flex-shrink-0" />
-          <span className="text-xs font-medium">{card.phone}</span>
+          <span className="text-xs font-medium">{card.phone || card.mobile}</span>
         </div>
         <div className="flex items-center gap-1 text-gray-600">
           <Mail className="w-3 h-3 flex-shrink-0" />
@@ -302,9 +283,6 @@ const ServiceCard = ({
         >
           <span className="relative z-10">View Full Details</span>
           <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-        </button>
-        <button className="text-[#FF5A00] font-bold text-xs hover:text-black transition-colors whitespace-nowrap">
-          View Service Owner
         </button>
       </div>
     </div>
@@ -369,7 +347,7 @@ const SidebarFilters = ({
   toggleProvince,
   selectedDistricts,
   toggleDistrict,
-
+  resetFilters,
   onApply,
   isDrawer = false,
   onClose
@@ -420,7 +398,7 @@ const SidebarFilters = ({
       {/* Price Range */}
       <div>
         <h3 className="text-[10px] font-bold text-gray-400 tracking-wider mb-2 uppercase">
-          Price Range
+          Price Range (LKR)
         </h3>
         <div className="flex items-center gap-2">
           <div className="flex items-center bg-[#FFF5F0] rounded border border-[#FFE0D0] px-2 py-1.5 flex-1">
@@ -431,7 +409,8 @@ const SidebarFilters = ({
               type="number"
               value={priceMin}
               onChange={(e) => setPriceMin(e.target.value)}
-              className="w-full bg-transparent outline-none text-[#FF5A00] text-xs font-semibold"
+              placeholder="Min"
+              className="w-full bg-transparent outline-none text-[#FF5A00] text-xs font-semibold placeholder-[#FF5A00]/40"
             />
           </div>
           <div className="flex items-center bg-[#FFF5F0] rounded border border-[#FFE0D0] px-2 py-1.5 flex-1">
@@ -442,7 +421,8 @@ const SidebarFilters = ({
               type="number"
               value={priceMax}
               onChange={(e) => setPriceMax(e.target.value)}
-              className="w-full bg-transparent outline-none text-[#FF5A00] text-xs font-semibold"
+              placeholder="Max"
+              className="w-full bg-transparent outline-none text-[#FF5A00] text-xs font-semibold placeholder-[#FF5A00]/40"
             />
           </div>
         </div>
@@ -556,31 +536,64 @@ const SidebarFilters = ({
         <span className="relative z-10">Apply Changes</span>
         <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
       </button>
+
+      <button
+        onClick={resetFilters}
+        className="relative overflow-hidden w-full bg-[#FF5A00] text-white font-bold py-3 rounded-xl transition-all duration-300 hover:bg-black group shadow-md"
+      >
+        <span className="relative z-10">Clear Filters</span>
+        <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+      </button>
     </div>
   </div>
 );
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+const ITEMS_PER_PAGE = 6;
+
 const BrowsePlace = () => {
+  const navigate = useNavigate();
   const [citySearch, setCitySearch] = useState("");
   const [isServiceOpen, setIsServiceOpen] = useState(false);
   const serviceDropdownRef = useRef<HTMLDivElement>(null);
 
-  const [selectedServices, setSelectedServices] = useState<string[]>([
-    "Plumbing"
-  ]);
-  const [priceMin, setPriceMin] = useState("1500");
-  const [priceMax, setPriceMax] = useState("100000");
+  // ── All filters start EMPTY / null ──────────────────────────────────────────
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
   const [emergencyService, setEmergencyService] = useState<string | null>(null);
   const [selectedProvinces, setSelectedProvinces] = useState<string[]>([]);
   const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const totalPages = 3;
 
   const [selectedCard, setSelectedCard] = useState<any>(null);
+  const [posts, setPosts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [selectedServiceProvider, setSelectedServiceProvider] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
+  // ── Fetch approved posts on mount ───────────────────────────────────────────
+  useEffect(() => {
+    const fetchPosts = async () => {
+      try {
+        setLoading(true);
+        const approvedPosts = await postService.getPostsByStatus("approved");
+        setPosts(approvedPosts);
+      } catch (error) {
+        console.error("Error fetching posts:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPosts();
+  }, []);
+
+  // ── Close service dropdown on outside click ─────────────────────────────────
   useEffect(() => {
     if (!isServiceOpen) return;
     const handler = (e: MouseEvent) => {
@@ -595,6 +608,110 @@ const BrowsePlace = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, [isServiceOpen]);
 
+  // ── Reset to page 1 whenever any filter changes ─────────────────────────────
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    citySearch,
+    selectedServices,
+    priceMin,
+    priceMax,
+    emergencyService,
+    selectedDistricts,
+    selectedProvinces
+  ]);
+
+  // ── Filter logic ────────────────────────────────────────────────────────────
+  const filteredPosts = useMemo(() => {
+    return posts.filter((post) => {
+      // City / keyword search — match against location or specificCities
+      if (citySearch.trim()) {
+        const search = citySearch.trim().toLowerCase();
+        const locationMatch = post.location?.toLowerCase().includes(search);
+        const citiesMatch = post.specificCities
+          ?.toLowerCase()
+          .includes(search);
+        const titleMatch = post.title?.toLowerCase().includes(search);
+        if (!locationMatch && !citiesMatch && !titleMatch) return false;
+      }
+
+      // Service type filter — post.availableServices is string[]
+      if (selectedServices.length > 0) {
+        const postServices: string[] = Array.isArray(post.availableServices)
+          ? post.availableServices
+          : [];
+        const hasMatch = selectedServices.some((s) =>
+          postServices.includes(s)
+        );
+        if (!hasMatch) return false;
+      }
+
+      // Price filter — parse startingPrice as a number
+      if (priceMin !== "" || priceMax !== "") {
+        const price = parseFloat(
+          String(post.startingPrice || "0").replace(/[^0-9.]/g, "")
+        );
+        if (priceMin !== "" && !isNaN(parseFloat(priceMin))) {
+          if (price < parseFloat(priceMin)) return false;
+        }
+        if (priceMax !== "" && !isNaN(parseFloat(priceMax))) {
+          if (price > parseFloat(priceMax)) return false;
+        }
+      }
+
+      // Emergency filter
+      if (emergencyService) {
+        if (post.emergency !== emergencyService) return false;
+      }
+
+      // District / city filter
+      if (selectedDistricts.length > 0) {
+        const locationMatch = selectedDistricts.some((d) =>
+          post.location?.toLowerCase().includes(d.toLowerCase())
+        );
+        const citiesMatch = selectedDistricts.some((d) =>
+          post.specificCities?.toLowerCase().includes(d.toLowerCase())
+        );
+        if (!locationMatch && !citiesMatch) return false;
+      }
+
+      // Province filter — if any district in that province is matched, province
+      // acts as a broad filter; if ONLY province selected (no districts), filter
+      // posts whose location falls under any city in that province
+      if (selectedProvinces.length > 0 && selectedDistricts.length === 0) {
+        const provinceCities = locationData
+          .filter((loc) => selectedProvinces.includes(loc.province))
+          .flatMap((loc) => loc.cities);
+        const locationMatch = provinceCities.some((c) =>
+          post.location?.toLowerCase().includes(c.toLowerCase())
+        );
+        const citiesMatch = provinceCities.some((c) =>
+          post.specificCities?.toLowerCase().includes(c.toLowerCase())
+        );
+        if (!locationMatch && !citiesMatch) return false;
+      }
+
+      return true;
+    });
+  }, [
+    posts,
+    citySearch,
+    selectedServices,
+    priceMin,
+    priceMax,
+    emergencyService,
+    selectedDistricts,
+    selectedProvinces
+  ]);
+
+  // ── Pagination ──────────────────────────────────────────────────────────────
+  const totalPages = Math.max(1, Math.ceil(filteredPosts.length / ITEMS_PER_PAGE));
+  const paginatedPosts = filteredPosts.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
   const toggleService = (s: string) =>
     setSelectedServices((p) =>
       p.includes(s) ? p.filter((x) => x !== s) : [...p, s]
@@ -612,16 +729,17 @@ const BrowsePlace = () => {
 
   const resetFilters = () => {
     setSelectedServices([]);
-    setPriceMin("1500");
-    setPriceMax("100000");
+    setPriceMin("");
+    setPriceMax("");
     setEmergencyService(null);
     setSelectedProvinces([]);
     setSelectedDistricts([]);
+    setCitySearch("");
   };
 
   const serviceLabel =
     selectedServices.length === 0
-      ? "Any Property Type"
+      ? "Any Service Type"
       : selectedServices.length === 1
       ? selectedServices[0]
       : `${selectedServices.length} Selected`;
@@ -644,6 +762,14 @@ const BrowsePlace = () => {
     onClose: () => setIsFilterOpen(false)
   };
 
+  // ── Normalize a post for card display ───────────────────────────────────────
+  const normalizeCard = (post: any) => ({
+    ...post,
+    img: post.images?.[0] || SampleImg,
+    images:
+      post.images && post.images.length > 0 ? post.images : [SampleImg]
+  });
+
   return (
     <div className="w-full min-h-screen bg-gray-50 font-sans">
       {/* ── Page Title ── */}
@@ -665,9 +791,17 @@ const BrowsePlace = () => {
                 type="text"
                 value={citySearch}
                 onChange={(e) => setCitySearch(e.target.value)}
-                placeholder="Enter city, neighborhood"
+                placeholder="Search by city, area, or service title…"
                 className="w-full bg-transparent outline-none text-gray-700 text-sm placeholder-gray-400 font-medium"
               />
+              {citySearch && (
+                <button
+                  onClick={() => setCitySearch("")}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
             <button className="relative overflow-hidden flex items-center justify-center gap-2 px-8 h-14 rounded-2xl bg-[#0072D1] text-white font-bold text-sm shadow-lg transition-all duration-300 hover:bg-black hover:scale-105 group flex-shrink-0">
               <Search className="w-5 h-5 relative z-10" strokeWidth={2.5} />
@@ -683,9 +817,16 @@ const BrowsePlace = () => {
                 <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
                 <input
                   type="text"
-                  placeholder="Enter city, neighborhood"
+                  value={citySearch}
+                  onChange={(e) => setCitySearch(e.target.value)}
+                  placeholder="Search city or service…"
                   className="w-full bg-transparent outline-none text-gray-700 text-sm placeholder-gray-400"
                 />
+                {citySearch && (
+                  <button onClick={() => setCitySearch("")}>
+                    <X className="w-4 h-4 text-gray-400" />
+                  </button>
+                )}
               </div>
               <button
                 onClick={() => setIsFilterOpen(true)}
@@ -719,31 +860,74 @@ const BrowsePlace = () => {
 
         {/* Cards */}
         <div className="flex-1 min-w-0">
-          <div className="hidden md:grid grid-cols-2 gap-5">
-            {sampleCards.map((card) => (
-              <ServiceCard
-                key={card.id}
-                card={card}
-                onViewDetails={setSelectedCard}
+          {/* Results count */}
+          {!loading && (
+            <p className="text-xs text-gray-400 font-medium mb-4">
+              {filteredPosts.length === 0
+                ? "No results"
+                : `Showing ${(currentPage - 1) * ITEMS_PER_PAGE + 1}–${Math.min(
+                    currentPage * ITEMS_PER_PAGE,
+                    filteredPosts.length
+                  )} of ${filteredPosts.length} service${filteredPosts.length !== 1 ? "s" : ""}`}
+            </p>
+          )}
+
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF5A00]"></div>
+            </div>
+          ) : filteredPosts.length === 0 ? (
+            /* ── Empty state ── */
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                <Search className="w-7 h-7 text-gray-300" />
+              </div>
+              <p className="font-bold text-gray-700 mb-1">No services found</p>
+              <p className="text-sm text-gray-400 mb-5">
+                Try adjusting your filters or search term
+              </p>
+              <button
+                onClick={resetFilters}
+                className="px-5 py-2 bg-[#FF5A00] text-white font-bold text-sm rounded-xl hover:bg-black transition-colors"
+              >
+                Clear Filters
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Desktop grid */}
+              <div className="hidden md:grid grid-cols-2 gap-5">
+                {paginatedPosts.map((post) => (
+                  <ServiceCard
+                    key={post.id}
+                    card={normalizeCard(post)}
+                    onViewDetails={setSelectedCard}
+                  />
+                ))}
+              </div>
+
+              {/* Mobile list */}
+              <div className="md:hidden flex flex-col gap-5">
+                {paginatedPosts.map((post) => (
+                  <ServiceCard
+                    key={post.id}
+                    card={normalizeCard(post)}
+                    onViewDetails={setSelectedCard}
+                  />
+                ))}
+              </div>
+
+              <Pagination
+                current={currentPage}
+                total={totalPages}
+                onChange={setCurrentPage}
               />
-            ))}
-          </div>
-          <div className="md:hidden flex flex-col gap-5">
-            {sampleCards.map((card) => (
-              <ServiceCard
-                key={card.id}
-                card={card}
-                onViewDetails={setSelectedCard}
-              />
-            ))}
-          </div>
-          <Pagination
-            current={currentPage}
-            total={totalPages}
-            onChange={setCurrentPage}
-          />
+            </>
+          )}
         </div>
       </div>
+
+      <Footer />
 
       {/* ── Mobile Filter Drawer ── */}
       {isFilterOpen && (
@@ -763,6 +947,20 @@ const BrowsePlace = () => {
         <FullDetailsModal
           card={selectedCard}
           onClose={() => setSelectedCard(null)}
+          onNavigateToProvider={(id) => navigate(`/public-profile/${id}`)}
+        />
+      )}
+
+      {/* ── Review Modal ── */}
+      {reviewModalOpen && selectedServiceProvider && (
+        <ReviewModal
+          isOpen={reviewModalOpen}
+          onClose={() => {
+            setReviewModalOpen(false);
+            setSelectedServiceProvider(null);
+          }}
+          serviceProviderId={selectedServiceProvider.id}
+          serviceProviderName={selectedServiceProvider.name}
         />
       )}
     </div>

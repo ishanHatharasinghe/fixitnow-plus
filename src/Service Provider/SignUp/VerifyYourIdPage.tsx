@@ -1,4 +1,6 @@
 import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { useSignup } from "../../contexts/SignupContext";
 import locationBackground from "../../assets/Backgrounds/Signupscreens3.png";
 
 interface IdVerificationFormData {
@@ -8,9 +10,12 @@ interface IdVerificationFormData {
 }
 
 const VerifyYourIdPage = () => {
+  const navigate = useNavigate();
+  const { updateServiceProviderData, serviceProviderData } = useSignup();
+  
   // Keeping simple local state for the UI demonstration
   const [localData, setLocalData] = useState<IdVerificationFormData>({
-    idNumber: "",
+    idNumber: serviceProviderData.idNumber || "",
     frontImage: null,
     backImage: null
   });
@@ -95,13 +100,28 @@ const VerifyYourIdPage = () => {
 
   const handleNextPage = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const validationErrors = validate();
-    setErrors(validationErrors);
-    setTouched({ idNumber: true, frontImage: true, backImage: true });
+    
+    // Simplified validation - only check ID number, NOT images
+    const newErrors: Partial<Record<keyof IdVerificationFormData, string>> = {};
+    if (!localData.idNumber.trim()) {
+      newErrors.idNumber = "ID number is required";
+    }
+    else if (localData.idNumber.length < 9) {
+      newErrors.idNumber = "Enter a valid ID number (min 9 characters)";
+    }
+    
+    setErrors(newErrors);
+    setTouched({ ...touched, idNumber: true });
 
-    if (Object.keys(validationErrors).length === 0) {
-      console.log("Form Submitted Successfully", localData);
-      // Proceed to next page logic here
+    if (Object.keys(newErrors).length === 0) {
+      // Save ONLY idNumber to context (NO images as per requirement)
+      updateServiceProviderData({
+        idNumber: localData.idNumber
+        // Do NOT save image files - user specified no image uploads
+      });
+      
+      // Navigate to next step
+      navigate('/signup/setup-image');
     }
   };
 
@@ -267,7 +287,10 @@ const VerifyYourIdPage = () => {
 
             {/* Buttons Layout */}
             <div className="flex flex-col sm:flex-row gap-4 mb-2">
-              <button className="relative overflow-hidden w-full bg-[#FF5A00] hover:bg-[#000000] text-white py-3 sm:py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg group mb-4">
+              <button 
+                type="button"
+                onClick={() => navigate('/signup/setup-location')}
+                className="relative overflow-hidden w-full bg-[#FF5A00] hover:bg-[#000000] text-white py-3 sm:py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg group mb-4">
                 <span className="relative z-10">Previous</span>
                 <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
               </button>
@@ -276,7 +299,7 @@ const VerifyYourIdPage = () => {
                 onClick={(e: any) =>
                   handleNextPage(e as React.FormEvent<HTMLFormElement>)
                 }
-                type="button"
+                type="submit"
                 className="relative overflow-hidden w-full bg-[#0072D1] hover:bg-[#000000] text-white py-3 sm:py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg group mb-4"
               >
                 <span className="relative z-10">Next Page</span>

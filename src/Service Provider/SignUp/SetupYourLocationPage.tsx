@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useSignup } from "../../contexts/SignupContext";
 import locationBackground from "../../assets/Backgrounds/Signupscreens3.png";
 
 const countries = [
@@ -380,6 +382,9 @@ const sriLankaLocations = {
 };
 
 const SetupYourLocationPage = () => {
+  const navigate = useNavigate();
+  const { updateServiceProviderData, serviceProviderData } = useSignup();
+  
   const [localData, setLocalData] = useState<{
     username: string;
     country: string;
@@ -387,11 +392,11 @@ const SetupYourLocationPage = () => {
     division: string;
     postalCode: string;
   }>({
-    username: "",
-    country: "Sri Lanka",
-    district: "",
-    division: "",
-    postalCode: ""
+    username: serviceProviderData.firstName || "",
+    country: serviceProviderData.address?.country || "Sri Lanka",
+    district: serviceProviderData.address?.state || "",
+    division: serviceProviderData.address?.city || "",
+    postalCode: serviceProviderData.address?.postalCode || ""
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -451,9 +456,20 @@ const SetupYourLocationPage = () => {
     );
 
     if (Object.keys(validationErrors).length === 0) {
-      setTimeout(() => {
-        console.log(localData);
-      }, 1500);
+      // Save data to context and navigate to next step
+      updateServiceProviderData({
+        firstName: localData.username,
+        address: {
+          street: serviceProviderData.address?.street || "",
+          city: localData.division,
+          state: localData.district,
+          postalCode: localData.postalCode,
+          country: localData.country
+        }
+      });
+      
+      // Navigate to next step
+      navigate('/signup/verify-id');
     }
   };
 
@@ -646,13 +662,18 @@ const SetupYourLocationPage = () => {
 
             {/* Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 mb-2">
-              <button className="relative overflow-hidden w-full bg-[#FF5A00] hover:bg-[#000000] text-white py-3 sm:py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg group mb-4">
+              <button 
+                type="button"
+                onClick={() => navigate('/signup/setup-account')}
+                className="relative overflow-hidden w-full bg-[#FF5A00] hover:bg-[#000000] text-white py-3 sm:py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg group mb-4">
                 <span className="relative z-10">Previous</span>
                 <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
               </button>
 
-              <button className="relative overflow-hidden w-full bg-[#0072D1] hover:bg-[#000000] text-white py-3 sm:py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg group mb-4">
-                <span className="relative z-10">Complete Setup</span>
+              <button 
+                type="submit"
+                className="relative overflow-hidden w-full bg-[#0072D1] hover:bg-[#000000] text-white py-3 sm:py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg group mb-4">
+                <span className="relative z-10">Next Page</span>
                 <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
               </button>
             </div>

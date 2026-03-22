@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useSignup } from "../../contexts/SignupContext";
 import categoriesBackground from "../../assets/Backgrounds/Signupscreens.jpg";
 
 interface AccountFormData {
@@ -10,11 +12,14 @@ interface AccountFormData {
 }
 
 const SetupYourAccountPage = () => {
+  const navigate = useNavigate();
+  const { updateServiceProviderData, serviceProviderData } = useSignup();
+  
   const [localData, setLocalData] = useState<AccountFormData>({
-    username: "",
-    description: "",
-    serviceType: "",
-    phone: ""
+    username: serviceProviderData.firstName || "",
+    description: serviceProviderData.lastName || "",
+    serviceType: serviceProviderData.services?.[0] || "",
+    phone: serviceProviderData.phoneNumber || ""
   });
 
   const [errors, setErrors] = useState<
@@ -115,11 +120,19 @@ const SetupYourAccountPage = () => {
 
     if (Object.keys(validationErrors).length === 0) {
       setLoading(true);
-      setTimeout(() => {
-        setLoading(false);
-        console.log("Account Setup Data:", localData);
-        // Navigate to next page logic here
-      }, 1500);
+      
+      // Save data to context and navigate to next step
+      updateServiceProviderData({
+        firstName: localData.username,
+        lastName: localData.description,
+        phoneNumber: localData.phone,
+        services: [localData.serviceType]
+      });
+      
+      // Navigate to next step
+      navigate('/signup/setup-location');
+      
+      setLoading(false);
     }
   };
 
@@ -263,6 +276,7 @@ const SetupYourAccountPage = () => {
             <div className="flex flex-col sm:flex-row gap-4">
               <button
                 type="button"
+                onClick={() => navigate('/signup/get-started')}
                 className="relative overflow-hidden w-full bg-[#FF5A00] hover:bg-black text-white py-3 sm:py-4 rounded-2xl font-semibold transition-all duration-300 hover:scale-105 group"
               >
                 <span className="relative z-10">Previous</span>

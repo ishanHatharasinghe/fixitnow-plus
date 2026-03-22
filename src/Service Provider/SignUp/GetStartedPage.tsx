@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Mail, Lock } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useSignup } from "../../contexts/SignupContext";
 import Img from "../../assets/Backgrounds/Signupscreens.jpg";
 
 interface FormData {
@@ -11,12 +13,15 @@ interface FormData {
 }
 
 const GetStartedPage = () => {
+  const navigate = useNavigate();
+  const { updateServiceProviderData, serviceProviderData } = useSignup();
+  
   const [formData, setFormData] = useState<FormData>({
-    firstName: "",
-    lastName: "",
-    email: "",
-    password: "",
-    confirmPassword: ""
+    firstName: serviceProviderData.firstName || "",
+    lastName: serviceProviderData.lastName || "",
+    email: serviceProviderData.email || "",
+    password: serviceProviderData.password || "",
+    confirmPassword: serviceProviderData.confirmPassword || ""
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
@@ -77,11 +82,20 @@ const GetStartedPage = () => {
 
     if (Object.keys(validationErrors).length === 0) {
       setLoading(true);
-      // Simulate API call
-      setTimeout(() => {
-        setLoading(false);
-        console.log("Form Submitted Successfully", formData);
-      }, 1500);
+      
+      // Save data to context and navigate to next step
+      updateServiceProviderData({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        password: formData.password,
+        confirmPassword: formData.confirmPassword
+      });
+      
+      // Navigate to next step
+      navigate('/signup/setup-account');
+      
+      setLoading(false);
     }
   };
 
@@ -207,7 +221,7 @@ const GetStartedPage = () => {
               )}
             </div>
 
-            {/* Sign Up Button */}
+            
             <button
               type="submit"
               disabled={loading}

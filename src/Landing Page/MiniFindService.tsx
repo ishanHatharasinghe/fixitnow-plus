@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   SlidersHorizontal,
@@ -136,6 +137,7 @@ const buildCityUrl = (city: string) => {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const ChooseCity = () => {
+  const navigate = useNavigate();
   // Map
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
@@ -564,7 +566,10 @@ const ChooseCity = () => {
 
             {/* More button */}
             <div className="mt-6 md:mt-8 flex justify-end">
-              <button className="relative overflow-hidden flex items-center justify-center gap-2 px-5 py-2 md:py-2.5 rounded-full border border-[#0072D1] bg-white text-[#0072D1] font-bold text-sm transition-all duration-300 hover:bg-black hover:text-white hover:border-black hover:scale-105 group shadow-md">
+              <button
+                onClick={() => navigate("/browseplace")}
+                className="relative overflow-hidden flex items-center justify-center gap-2 px-5 py-2 md:py-2.5 rounded-full border border-[#0072D1] bg-white text-[#0072D1] font-bold text-sm transition-all duration-300 hover:bg-black hover:text-white hover:border-black hover:scale-105 group shadow-md"
+              >
                 <div className="bg-[#0072D1] text-white rounded-full p-1 group-hover:bg-white group-hover:text-black transition-colors duration-300">
                   <ArrowRight className="w-4 h-4" strokeWidth={3} />
                 </div>

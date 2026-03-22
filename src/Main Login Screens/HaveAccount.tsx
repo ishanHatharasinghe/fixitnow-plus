@@ -1,7 +1,9 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 
 const AlreadyHaveAccount: React.FC = () => {
+  const navigate = useNavigate();
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-white px-4">
       <div className="flex flex-col items-center space-y-2 text-center w-full max-w-md">
@@ -27,9 +29,7 @@ const AlreadyHaveAccount: React.FC = () => {
         {/* Buttons */}
         <div className="flex flex-col w-full max-w-sm gap-3">
           <button
-            onClick={() => {
-              /* navigate to Login */
-            }}
+            onClick={() => navigate("/welcomeback")}
             className="relative overflow-hidden w-full bg-[#FF5A00] text-white font-bold text-xl py-4 rounded-full
               transition-all duration-300 hover:bg-black hover:scale-[1.02] group shadow-lg"
           >
@@ -41,9 +41,7 @@ const AlreadyHaveAccount: React.FC = () => {
           </button>
 
           <button
-            onClick={() => {
-              /* navigate to Role Select */
-            }}
+            onClick={() => navigate("/getstarted")}
             className="relative overflow-hidden w-full bg-[#0072D1] text-white font-bold text-xl py-4 rounded-full
               transition-all duration-300 hover:bg-black hover:scale-[1.02] group shadow-lg"
           >

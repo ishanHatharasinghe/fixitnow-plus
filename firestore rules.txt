@@ -1,0 +1,126 @@
+// Firestore Security Rules
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Allow read access to all users for public data
+    match /public/{document=**} {
+      allow read: if true;
+    }
+    
+    // Users collection - users can read their own data and admins can manage all
+    match /users/{userId} {
+      // Allow anyone to read user profiles (for public profile viewing)
+      allow get: if true;
+      
+      // Allow users to create their own profile (only if they're the authenticated user)
+      allow create: if request.auth != null && 
+                    request.auth.uid == userId;
+      
+      // Allow users full CRUD access to their own profile data
+      allow update: if request.auth != null && 
+                    request.auth.uid == userId;
+      
+      // Allow users to delete their own profile
+      allow delete: if request.auth != null && 
+                    request.auth.uid == userId;
+    }
+    
+    // Admins can manage all users with full access
+    match /users/{userId} {
+      allow read, write: if request.auth.token.email == 'ishanhatharasinghe222@gmail.com';
+    }
+    
+    // Posts collection - service providers can manage their own posts
+    match /posts/{postId} {
+      // Allow read access to all posts with approved status (for individual reads)
+      allow get: if resource.data.status == 'approved' || 
+                 request.auth != null && 
+                 (request.auth.uid == resource.data.serviceProviderId ||
+                  request.auth.token.email == 'ishanhatharasinghe222@gmail.com');
+      
+      // Allow list operations for queries (e.g., getPostsByServiceProvider)
+      allow list: if request.auth != null;
+      
+      // Allow service providers to create posts
+      allow create: if request.auth != null && 
+                    request.resource.data.serviceProviderId == request.auth.uid &&
+                    request.resource.data.status == 'pending';
+      
+      // Allow service providers to update their own posts (only if pending or draft)
+      allow update: if request.auth != null && 
+                    (request.auth.uid == resource.data.serviceProviderId ||
+                     request.auth.token.email == 'ishanhatharasinghe222@gmail.com') &&
+                    (resource.data.status == 'pending' || 
+                     resource.data.status == 'draft' ||
+                     request.auth.token.email == 'ishanhatharasinghe222@gmail.com');
+      
+      // Allow service providers to delete their own posts (only if pending or draft)
+      allow delete: if request.auth != null && 
+                    request.auth.uid == resource.data.serviceProviderId &&
+                    (resource.data.status == 'pending' || 
+                     resource.data.status == 'draft');
+    }
+    
+    // Reviews collection - role-based review management
+    match /reviews/{reviewId} {
+      
+      // READ ACCESS:
+      // - Anyone can read individual active reviews (public reviews)
+      // - Authenticated users can query/list reviews
+      allow get: if resource.data.status == 'active';
+      allow list: if request.auth != null;
+      
+      // CREATE ACCESS:
+      // - Any authenticated user can create a review
+      // - Validation: reviewerId must match authenticated user
+      // - Validation: rating must be 1-5
+      // - Validation: comment must not be empty
+      // - Validation: cannot review own profile (reviewerId !== serviceProviderId)
+      allow create: if request.auth != null &&
+                    request.resource.data.reviewerId == request.auth.uid &&
+                    request.resource.data.rating >= 1 &&
+                    request.resource.data.rating <= 5 &&
+                    request.resource.data.comment != "" &&
+                    request.resource.data.comment.size() > 0 &&
+                    request.resource.data.reviewerId != request.resource.data.serviceProviderId;
+      
+      // UPDATE ACCESS:
+      // - Reviewer can update their own review
+      // - Admin can update any review
+      allow update: if request.auth != null && (
+        request.auth.uid == resource.data.reviewerId ||
+        request.auth.token.email == 'ishanhatharasinghe222@gmail.com'
+      );
+      
+      // DELETE ACCESS (Role-Based Authorization):
+      // - ADMIN: Can delete ANY review
+      // - SERVICE_PROVIDER: Can delete reviews on OWN profile only
+      // - SEEKER/USER: Can delete ONLY their OWN reviews
+      allow delete: if request.auth != null && (
+        // Admin can delete any review
+        request.auth.token.email == 'ishanhatharasinghe222@gmail.com' ||
+        // Reviewer (seeker) can delete their own review
+        request.auth.uid == resource.data.reviewerId ||
+        // Service provider can delete reviews on their own profile
+        request.auth.uid == resource.data.serviceProviderId
+      );
+    }
+    
+    // Admin logs collection - only admins can access
+    match /admin_logs/{logId} {
+      // Allow admins to read all logs
+      allow get: if request.auth.token.email == 'ishanhatharasinghe222@gmail.com';
+      
+      // Allow admins to create logs
+      allow create: if request.auth.token.email == 'ishanhatharasinghe222@gmail.com';
+      
+      // Allow admins to update logs
+      allow update: if request.auth.token.email == 'ishanhatharasinghe222@gmail.com';
+      
+      // Allow admins to delete logs
+      allow delete: if request.auth.token.email == 'ishanhatharasinghe222@gmail.com';
+    }
+  }
+}

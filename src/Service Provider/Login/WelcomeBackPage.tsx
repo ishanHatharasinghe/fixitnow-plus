@@ -1,9 +1,53 @@
 import { useState } from "react";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../../../src/firebase";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../../src/contexts/AuthContext";
 import Img from "../../assets/Backgrounds/loginscreen.png";
 
 const WelcomeBackPage = () => {
   const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+  const { userRole } = useAuth();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      
+      // Redirect based on user role
+      if (userRole === 'admin') {
+        navigate('/admin/dashboard');
+      } else if (userRole === 'service_provider') {
+        navigate('/service-provider/profile');
+      } else {
+        navigate('/seeker/dashboard');
+      }
+    } catch (err: any) {
+      console.error('Login error:', err);
+      if (err.code === 'auth/invalid-credential') {
+        setError('Invalid email or password. Please try again.');
+      } else if (err.code === 'auth/user-not-found') {
+        setError('No account found with this email. Please sign up first.');
+      } else if (err.code === 'auth/wrong-password') {
+        setError('Incorrect password. Please try again.');
+      } else if (err.code === 'auth/user-disabled') {
+        setError('This account has been disabled. Please contact support.');
+      } else {
+        setError('Login failed. Please check your internet connection and try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -41,8 +85,11 @@ const WelcomeBackPage = () => {
                 <input
                   type="email"
                   name="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-12 sm:pl-14 pr-4 sm:pr-6 py-3 sm:py-4 rounded-2xl bg-gray-50/80 backdrop-blur-sm border-2 border-[#0072D1]/30 focus:border-[#3ABBD0] focus:outline-none focus:ring-4 focus:ring-[#3ABBD0]/20 transition-all duration-300 group-hover:border-[#3ABBD0]/50"
                   placeholder="Enter your email"
+                  required
                 />
               </div>
             </div>
@@ -58,8 +105,11 @@ const WelcomeBackPage = () => {
                 <input
                   type={showPassword ? "text" : "password"}
                   name="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-12 sm:pl-14 pr-12 sm:pr-14 py-3 sm:py-4 rounded-2xl bg-gray-50/80 backdrop-blur-sm border-2 border-[#0072D1]/30 focus:border-[#3ABBD0] focus:outline-none focus:ring-4 focus:ring-[#3ABBD0]/20 transition-all duration-300 group-hover:border-[#3ABBD0]/50"
                   placeholder="Enter your password"
+                  required
                 />
                 <button
                   type="button"
@@ -75,27 +125,55 @@ const WelcomeBackPage = () => {
               </div>
               {/* Forgot password link */}
               <p className="text-right mt-2">
-                <button className="text-sm text-[#0072D1] font-semibold transition-colors duration-300">
+                <button 
+                  type="button"
+                  onClick={() => navigate('/forgot-password')}
+                  className="text-sm text-[#0072D1] font-semibold transition-colors duration-300 hover:text-[#005bb5]"
+                >
                   Forgot password?
                 </button>
               </p>
+
+              {/* Error message */}
+              {error && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-600 text-sm">{error}</p>
+                </div>
+              )}
             </div>
 
             {/* Login Button */}
-            <button className="relative overflow-hidden w-full bg-[#0072D1] hover:bg-[#000000] text-white py-3 sm:py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg group mb-4">
-              <span className="relative z-10">Login</span>
+            <button 
+              onClick={handleSubmit}
+              disabled={loading}
+              className="relative overflow-hidden w-full bg-[#0072D1] hover:bg-[#000000] text-white py-3 sm:py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg group mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="relative z-10">
+                {loading ? (
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Signing in...</span>
+                  </div>
+                ) : (
+                  "Login"
+                )}
+              </span>
               <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
             </button>
 
             <p className="text-center text-[#000000] text-sm sm:text-base">
               Don't have an account?{" "}
-              <button className="text-[#0072D1] font-semibold transition-colors duration-300">
+              <button 
+                type="button"
+                onClick={() => navigate('/getstarted')}
+                className="text-[#0072D1] font-semibold transition-colors duration-300 hover:text-[#005bb5]"
+              >
                 Sign Up
               </button>
             </p>
 
             {/* Pagination Dots */}
-            <div className="flex justify-center  gap-2 mt-5">
+            <div className="flex justify-center gap-2 mt-5">
               <span className="w-2 h-2 rounded-full bg-gray-700"></span>
               <span className="w-2 h-2 rounded-full bg-gray-300"></span>
               <span className="w-2 h-2 rounded-full bg-gray-300"></span>

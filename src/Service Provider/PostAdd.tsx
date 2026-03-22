@@ -1,4 +1,7 @@
-import React, { useState, useRef, useCallback, type ReactNode } from "react";
+import React, { useState, useRef, useCallback, useEffect, type ReactNode } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { useNavigate, useParams } from "react-router-dom";
+import { postService } from "../services/postService";
 import {
   ArrowRight,
   Edit3,
@@ -543,11 +546,13 @@ const StepNav = ({
 const DetailsStep = ({
   form,
   set,
-  onNext
+  onNext,
+  isEditMode = false
 }: {
   form: FormType;
   set: React.Dispatch<React.SetStateAction<FormType>>;
   onNext: () => void;
+  isEditMode?: boolean;
 }) => {
   const [checkItem, setCheckItem] = useState("");
   const [errors, setErrors] = useState<Record<string, string | null>>({});
@@ -634,12 +639,29 @@ const DetailsStep = ({
 
   return (
     <div className="space-y-8">
+      {/* ── Edit Mode Banner ── */}
+      {isEditMode && (
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 flex items-start gap-3">
+          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Edit3 className="w-5 h-5 text-blue-600" strokeWidth={2.5} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-blue-900">
+              Editing Your Post
+            </p>
+            <p className="text-xs text-blue-700 mt-0.5">
+              Make any necessary changes to your post. When finished, it will be resubmitted to the admin for approval.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Service Info ── */}
       <div>
         <SectionTitle
           icon={Briefcase}
-          title="Create A Post"
-          subtitle="Tell clients what you offer"
+          title={isEditMode ? "Review & Update Your Post" : "Create A Post"}
+          subtitle={isEditMode ? "Make changes to your post details" : "Tell clients what you offer"}
         />
         <div className="space-y-4">
           <Field label="Post Title" required error={err("title")}>
@@ -1434,19 +1456,21 @@ const GalleryStep = ({
 
 const FinishStep = ({
   form,
-  setStep
+  setStep,
+  handleSubmit,
+  isEditMode = false,
+  submitting = false
 }: {
   form: FormType;
   setStep: React.Dispatch<React.SetStateAction<number>>;
+  handleSubmit: () => void;
+  isEditMode?: boolean;
+  submitting?: boolean;
 }) => {
   const [activeImg, setActiveImg] = useState(0);
 
-  const previews =
-    form.imagePreviews.length > 0
-      ? form.imagePreviews
-      : [
-          "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=700&q=80"
-        ];
+  // No default/placeholder images — images are not stored (no Firebase Storage)
+  const previews = form.imagePreviews.length > 0 ? form.imagePreviews : [];
 
   const infoRows = [
     { label: "Included Services", value: form.checklist.join(", ") || null },
@@ -1586,17 +1610,19 @@ const FinishStep = ({
         <AlertCircle className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
         <div>
           <p className="text-sm font-bold text-emerald-700">
-            Ready to publish!
+            {isEditMode ? "Ready to resubmit!" : "Ready to publish!"}
           </p>
           <p className="text-xs text-emerald-600 mt-0.5">
-            Review your post above. Click Finish to submit it for review.
+            {isEditMode
+              ? "Review your updated post above. Click Update & Resubmit to send it back to the admin for approval."
+              : "Review your post above. Click Finish to submit it for review."}
           </p>
         </div>
       </div>
 
       <NextBtn
-        label="Finish"
-        onClick={() => alert("Post submitted successfully!")}
+        label={submitting ? "Submitting…" : isEditMode ? "Update & Resubmit" : "Finish"}
+        onClick={handleSubmit}
       />
     </div>
   );
@@ -1607,6 +1633,149 @@ const FinishStep = ({
 const PostYourAdd = () => {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(INITIAL_FORM);
+  const [submitting, setSubmitting] = useState(false);
+  const [loadingPost, setLoadingPost] = useState(false);
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
+  const { postId } = useParams<{ postId?: string }>();
+
+  // When a postId param is present we are in EDIT mode
+  const isEditMode = Boolean(postId);
+
+  // ── Prefill form when editing ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!postId) return;
+
+    const loadPost = async () => {
+      try {
+        setLoadingPost(true);
+        const existing = await postService.getPost(postId);
+        if (!existing) {
+          alert("Post not found.");
+          navigate("/my-posts");
+          return;
+        }
+
+        // Map Firestore Post fields back into FormType
+        setForm({
+          title:           existing.title         || "",
+          category:        existing.category      || "",
+          specializations: existing.specializations || "",
+          location:        existing.location      || "",
+          specificCities:  existing.specificCities || "",
+          travelDistance:  existing.travelDistance || "",
+          pricingModel:    existing.pricingModel  || "",
+          description:     existing.description   || "",
+          keywords:        existing.keywords      || "",
+          checklist:       existing.checklist     || [],
+          clientMaterials: existing.clientMaterials || "No",
+          timeFromHour:    existing.timeFromHour  || "07",
+          timeFromAmPm:    existing.timeFromAmPm  || "AM",
+          timeToHour:      existing.timeToHour    || "07",
+          timeToAmPm:      existing.timeToAmPm    || "PM",
+          availableDays:   existing.availableDays || [],
+          startingPrice:   existing.startingPrice || "",
+          inspectionFee:   existing.inspectionFee || "",
+          emergency:       existing.emergency     || "No",
+          ownerName:       existing.ownerName     || "",
+          ownerAddress:    existing.ownerAddress  || "",
+          nic:             existing.nic           || "",
+          mobile:          existing.mobile        || "",
+          email:           existing.email         || "",
+          // Images are never stored — keep empty (no Firebase Storage)
+          images:          [],
+          imagePreviews:   [],
+          pdf:             null,
+          pdfName:         "",
+        });
+      } catch (err) {
+        console.error("Error loading post for edit:", err);
+        alert("Failed to load post data. Please try again.");
+        navigate("/my-posts");
+      } finally {
+        setLoadingPost(false);
+      }
+    };
+
+    loadPost();
+  }, [postId, navigate]);
+
+  // ── Submit: create new OR update+resubmit existing ────────────────────────
+  const handleSubmit = async () => {
+    if (submitting) return;
+
+    if (!currentUser) {
+      alert("You must be logged in.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      const postData = {
+        title:           form.title,
+        category:        form.category,
+        specializations: form.specializations  || "",
+        location:        form.location,
+        specificCities:  form.specificCities   || "",
+        travelDistance:  form.travelDistance   || "",
+        pricingModel:    form.pricingModel     || "",
+        description:     form.description      || "",
+        keywords:        form.keywords         || "",
+        checklist:       form.checklist,
+        clientMaterials: form.clientMaterials,
+        timeFromHour:    form.timeFromHour,
+        timeFromAmPm:    form.timeFromAmPm,
+        timeToHour:      form.timeToHour,
+        timeToAmPm:      form.timeToAmPm,
+        availableDays:   form.availableDays,
+        startingPrice:   form.startingPrice    || "",
+        inspectionFee:   form.inspectionFee    || "",
+        emergency:       form.emergency,
+        ownerName:       form.ownerName,
+        ownerAddress:    form.ownerAddress     || "",
+        nic:             form.nic              || "",
+        mobile:          form.mobile,
+        email:           form.email,
+        images:          [],  // No Firebase Storage
+        pdf:             "",  // No Firebase Storage
+        serviceProviderId: currentUser.uid,
+      };
+
+      if (isEditMode && postId) {
+        // Update existing post and reset to pending for re-approval
+        await postService.updatePostAndResubmit(postId, postData);
+        alert("Post updated and resubmitted for approval!");
+      } else {
+        // Brand new post
+        await postService.createPost(postData);
+        alert("Post submitted successfully! Your post is now pending approval.");
+      }
+
+      navigate("/my-posts");
+    } catch (error) {
+      console.error("Error submitting post:", error);
+      alert("Failed to submit post. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ── Loading skeleton while prefilling form ────────────────────────────────
+  if (loadingPost) {
+    return (
+      <div className="relative w-full min-h-screen font-sans flex items-center justify-center">
+        <div className="absolute inset-0 z-0">
+          <img src={PostBg} alt="" className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/50 to-black/70" />
+        </div>
+        <div className="relative z-10 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white font-bold text-lg">Loading post data…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full min-h-screen font-sans">
@@ -1619,15 +1788,24 @@ const PostYourAdd = () => {
       <div className="relative z-10 w-full max-w-6xl mx-auto px-4 md:px-8 py-10">
         {/* ── Hero header ── */}
         <div className="text-center mb-8 md:mb-10">
-          <h1 className="font-rostex text-4xl md:text-[90px]  uppercase tracking-wide leading-[1.0]">
-            <span className="text-[#FFFFFF]">POST YOUR </span>
-            <span className="text-[#FFFFFF]">ADD</span>
+          <h1 className="font-rostex text-4xl md:text-[90px] uppercase tracking-wide leading-[1.0]">
+            {isEditMode ? (
+              <>
+                <span className="text-[#FFFFFF]">EDIT YOUR </span>
+                <span className="text-[#FF5A00]">POST</span>
+              </>
+            ) : (
+              <>
+                <span className="text-[#FFFFFF]">POST YOUR </span>
+                <span className="text-[#FFFFFF]">ADD</span>
+              </>
+            )}
           </h1>
           <p className="text-white/70 text-xs md:text-sm max-w-xl mx-auto mt-3 leading-relaxed font-medium">
-            Discover the smarter way to list effortlessly post your boarding
-            rooms, houses, hostels, or luxury apartments on our all in one
-            platform. We bridge the gap between service providers and clients
-            actively searching for help in their area.
+            {isEditMode
+              ? "Update your listing details below. Once submitted, your post will be sent back to the admin for re-approval."
+              : "Discover the smarter way to list effortlessly post your boarding rooms, houses, hostels, or luxury apartments on our all in one platform. We bridge the gap between service providers and clients actively searching for help in their area."
+            }
           </p>
         </div>
 
@@ -1655,6 +1833,7 @@ const PostYourAdd = () => {
                   form={form}
                   set={setForm}
                   onNext={() => setStep(1)}
+                  isEditMode={isEditMode}
                 />
               )}
               {step === 1 && (
@@ -1664,7 +1843,15 @@ const PostYourAdd = () => {
                   onNext={() => setStep(2)}
                 />
               )}
-              {step === 2 && <FinishStep form={form} setStep={setStep} />}
+              {step === 2 && (
+                <FinishStep
+                  form={form}
+                  setStep={setStep}
+                  handleSubmit={handleSubmit}
+                  isEditMode={isEditMode}
+                  submitting={submitting}
+                />
+              )}
             </div>
           </div>
         </div>
