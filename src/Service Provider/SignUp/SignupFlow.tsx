@@ -1,4 +1,4 @@
-import { useSignup } from "../../context/SignupContext";
+import { useSignup } from "../../contexts/SignupContext";
 import UserTypeSelectionPage from "./UserTypeSelectionPage";
 import GetStartedPage from "./GetStartedPage";
 import SetupYourAccountPage from "./SetupYourAccountPage";

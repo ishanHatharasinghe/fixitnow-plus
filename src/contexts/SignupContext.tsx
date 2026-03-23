@@ -12,7 +12,7 @@ interface ServiceProviderData {
   firstName: string;
   lastName: string;
   phoneNumber: string;
-  userType: 'individual' | 'business';
+  userType: 'individual' | 'business' | 'boarding_owner';
   businessName?: string;
   businessRegistrationNumber?: string;
   address: {
@@ -38,6 +38,9 @@ interface ServiceProviderData {
     start: string;
     end: string;
   };
+  profileImage?: string;
+  idFrontImage?: string;
+  idBackImage?: string;
 }
 
 interface SignupContextType {
@@ -47,6 +50,11 @@ interface SignupContextType {
   isSubmitting: boolean;
   submitError: string | null;
   completeSignup: () => Promise<void>;
+  currentStep: number;
+  nextStep: () => void;
+  prevStep: () => void;
+  formData: Partial<ServiceProviderData>;
+  updateFormData: (data: Partial<ServiceProviderData>) => void;
 }
 
 const SignupContext = createContext<SignupContextType | undefined>(undefined);
@@ -86,11 +94,23 @@ export const SignupProvider: React.FC<SignupProviderProps> = ({ children }) => {
       start: '09:00',
       end: '17:00'
     },
-    services: []
+    services: [],
+    profileImage: undefined,
+    idFrontImage: undefined,
+    idBackImage: undefined
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [currentStep, setCurrentStep] = useState(1);
+
+  const nextStep = useCallback(() => {
+    setCurrentStep(prev => prev + 1);
+  }, []);
+
+  const prevStep = useCallback(() => {
+    setCurrentStep(prev => Math.max(1, prev - 1));
+  }, []);
 
   const updateServiceProviderData = useCallback((data: Partial<ServiceProviderData>) => {
     setServiceProviderData(prev => ({
@@ -122,7 +142,10 @@ export const SignupProvider: React.FC<SignupProviderProps> = ({ children }) => {
         start: '09:00',
         end: '17:00'
       },
-      services: []
+      services: [],
+      profileImage: undefined,
+      idFrontImage: undefined,
+      idBackImage: undefined
     });
     setSubmitError(null);
   }, []);
@@ -142,11 +165,7 @@ export const SignupProvider: React.FC<SignupProviderProps> = ({ children }) => {
         businessName,
         businessRegistrationNumber,
         address,
-        idType,
-        idNumber,
-        services,
-        availability,
-        workingHours
+        idNumber
       } = serviceProviderData;
 
       // Validation - only check fields that are actually required
@@ -234,7 +253,12 @@ export const SignupProvider: React.FC<SignupProviderProps> = ({ children }) => {
     resetSignupData,
     isSubmitting,
     submitError,
-    completeSignup
+    completeSignup,
+    currentStep,
+    nextStep,
+    prevStep,
+    formData: serviceProviderData,
+    updateFormData: updateServiceProviderData
   };
 
   return (

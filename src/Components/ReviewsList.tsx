@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Star, Calendar, Filter, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { Star,  Filter, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import ReviewCard from './ReviewCard';
 import { reviewService } from '../services/reviewService';
 import type { Review } from '../services/reviewService';

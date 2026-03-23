@@ -27,6 +27,13 @@ export class ReviewAuthorizationError extends Error {
 
 const reviewsCollection = collection(db, 'reviews');
 
+/** Helper to convert Date | Timestamp to milliseconds */
+const toMs = (d: Date | Timestamp): number => {
+  if (d instanceof Date) return d.getTime();
+  if (d instanceof Timestamp) return d.toMillis();
+  return 0;
+};
+
 export const reviewService = {
   /**
    * CREATE REVIEW - Add a new review
@@ -174,7 +181,7 @@ export const reviewService = {
     });
 
     // Sort by createdAt descending (newest first)
-    return reviews.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return reviews.sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
   },
 
   /**
@@ -259,7 +266,7 @@ export const reviewService = {
     });
 
     // Sort by createdAt descending (newest first)
-    return reviews.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return reviews.sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
   },
 
   /**

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../../../src/firebase";
+import { auth } from "../../firebase";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import Img from "../../assets/Backgrounds/loginscreen.png";

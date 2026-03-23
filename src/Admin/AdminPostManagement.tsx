@@ -61,6 +61,7 @@ interface PostRow {
   clientMaterials?: string;
   emergency?: string;
   images?: string[];
+  serviceProviderId?: string;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────

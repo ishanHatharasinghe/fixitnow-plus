@@ -556,17 +556,12 @@ const UserProfile: React.FC = () => {
   const [coverSrc, setCoverSrc] = useState<string>(COVER_IMG);
   const [profileImageSrc, setProfileImageSrc] = useState<string>("");
   const [selectedPost, setSelectedPost] = useState<any>(null); // State for the full details modal
-  const [isEditing, setIsEditing] = useState(false);
-  const [editFormData, setEditFormData] = useState({
-    displayName: userProfile?.displayName || "",
-    phoneNumber: userProfile?.phoneNumber || "",
-    address: userProfile?.address || "",
-    nic: userProfile?.nic || ""
-  });
-  const [saving, setSaving] = useState(false);
+
+  
+  
   const [reviews, setReviews] = useState<any[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
-  const [averageRating, setAverageRating] = useState<number>(0);
+  
   const [providerData, setProviderData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -579,6 +574,8 @@ const UserProfile: React.FC = () => {
   // ── Notifications ─────────────────────────────────────────────────────────
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(true);
+  const [averageRating, setAverageRating] = useState<number>(0);
+  const [editFormData, setEditFormData] = useState<any>({});
 
   useEffect(() => {
     if (!currentUser?.uid) {
@@ -911,9 +908,8 @@ const UserProfile: React.FC = () => {
             <>
               <ReviewsList
                 serviceProviderId={currentUser?.uid || ""}
-                reviews={reviews}
-                onAddReview={() => setShowReviewModal(true)}
-                loading={loadingReviews}
+                serviceProviderName={userProfile?.displayName || currentUser?.email || "Service Provider"}
+                onReviewAdded={() => setShowReviewModal(false)}
               />
             </>
           )}
@@ -1024,9 +1020,8 @@ const UserProfile: React.FC = () => {
             <>
               <ReviewsList
                 serviceProviderId={currentUser?.uid || ""}
-                reviews={reviews}
-                onAddReview={() => setShowReviewModal(true)}
-                loading={loadingReviews}
+                serviceProviderName={userProfile?.displayName || currentUser?.email || "Service Provider"}
+                onReviewAdded={() => setShowReviewModal(false)}
               />
             </>
           )}
@@ -1054,8 +1049,13 @@ const UserProfile: React.FC = () => {
       )}
 
       {/* ── Add Review Modal ── */}
-      {showReviewModal && (
-        <AddReviewModal onClose={() => setShowReviewModal(false)} />
+      {showReviewModal && currentUser && (
+        <ReviewModal
+          isOpen={showReviewModal}
+          onClose={() => setShowReviewModal(false)}
+          serviceProviderId={currentUser.uid}
+          serviceProviderName={userProfile?.displayName || currentUser.email || "Service Provider"}
+        />
       )}
     </div>
   );

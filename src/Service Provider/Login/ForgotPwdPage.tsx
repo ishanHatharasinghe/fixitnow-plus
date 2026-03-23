@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Mail, ArrowLeft } from "lucide-react";
 import { sendPasswordResetEmail } from "firebase/auth";
-import { auth } from "../../../firebase";
+import { auth } from "../../firebase";
 import { useNavigate } from "react-router-dom";
 import Img from "../../assets/Backgrounds/loginscreen2.png";
 

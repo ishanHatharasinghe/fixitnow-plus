@@ -1,16 +1,16 @@
 import { Users, Home } from "lucide-react";
 import { useState } from "react";
 import { BsStars } from "react-icons/bs";
-import { useSignup } from "../../context/SignupContext";
+import { useSignup } from "../../contexts/SignupContext";
 import heroBackground from "../../assets/images/background/hero-background.webp";
 
 const UserTypeSelectionPage = () => {
   const { formData, updateFormData, nextStep } = useSignup();
 
-  const [selectedType, setSelectedType] = useState(formData.userType || "");
+  const [selectedType, setSelectedType] = useState<'individual' | 'business' | 'boarding_owner' | ''>(formData.userType || "");
   const [error, setError] = useState("");
 
-  const handleTypeSelect = (type: string) => {
+  const handleTypeSelect = (type: 'individual' | 'business' | 'boarding_owner') => {
     setSelectedType(type);
     setError("");
   };
@@ -71,11 +71,11 @@ const UserTypeSelectionPage = () => {
 
               {/* User Type Cards */}
               <div className="space-y-4 mb-8">
-                {/* Boarding Finder Card */}
+                {/* Individual Card */}
                 <div
-                  onClick={() => handleTypeSelect("boarding_finder")}
+                  onClick={() => handleTypeSelect("individual")}
                   className={`relative p-6 rounded-2xl border-3 cursor-pointer transition-all duration-300 transform hover:scale-105 ${
-                    selectedType === "boarding_finder"
+                    selectedType === "individual"
                       ? "border-[#3ABBD0] bg-[#3ABBD0]/10 shadow-lg"
                       : "border-gray-300 bg-white/50 hover:border-[#3ABBD0]/50"
                   }`}
@@ -83,7 +83,7 @@ const UserTypeSelectionPage = () => {
                   <div className="flex items-start gap-4">
                     <div
                       className={`p-3 rounded-xl ${
-                        selectedType === "boarding_finder"
+                        selectedType === "individual"
                           ? "bg-[#3ABBD0] text-white"
                           : "bg-gray-100 text-gray-600"
                       }`}
@@ -92,10 +92,10 @@ const UserTypeSelectionPage = () => {
                     </div>
                     <div className="flex-1">
                       <h3 className="text-xl font-bold text-[#263D5D] mb-2">
-                        Boarding Finder
+                        Individual
                       </h3>
                       <p className="text-gray-600 text-sm mb-3">
-                        I'm looking for boarding or rental places to stay
+                        I'm looking for services as an individual
                       </p>
                       <ul className="space-y-1 text-sm text-gray-600">
                         <li className="flex items-center gap-2">
@@ -104,22 +104,22 @@ const UserTypeSelectionPage = () => {
                         </li>
                         <li className="flex items-center gap-2">
                           <div className="w-1.5 h-1.5 bg-[#3ABBD0] rounded-full"></div>
-                          Browse available properties
+                          Browse available services
                         </li>
                         <li className="flex items-center gap-2">
                           <div className="w-1.5 h-1.5 bg-[#3ABBD0] rounded-full"></div>
-                          Contact property owners
+                          Contact service providers
                         </li>
                       </ul>
                     </div>
                     <div
                       className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                        selectedType === "boarding_finder"
+                        selectedType === "individual"
                           ? "border-[#3ABBD0] bg-[#3ABBD0]"
                           : "border-gray-300"
                       }`}
                     >
-                      {selectedType === "boarding_finder" && (
+                      {selectedType === "individual" && (
                         <div className="w-3 h-3 bg-white rounded-full"></div>
                       )}
                     </div>

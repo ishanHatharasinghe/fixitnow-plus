@@ -11,7 +11,7 @@ import {
   Mail,
   Heart,
   CornerDownLeft,
-  MoreVertical,
+  
   User,
   X,
   List,
@@ -308,11 +308,10 @@ const AddReviewModal = ({
       await reviewService.createReview({
         serviceProviderId: serviceProviderId,
         reviewerId: currentUser.uid,
-        text: reviewText,
+        reviewerName: name,
+        comment: reviewText,
         rating: rating,
-        avatar: currentUser.photoURL || "",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        reviewerAvatar: currentUser.photoURL || ""
       });
       onReviewAdded?.();
       onClose();

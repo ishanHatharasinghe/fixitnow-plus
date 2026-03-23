@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useSignup } from '../../../contexts/SignupContext';
+import { useSignup } from '../../contexts/SignupContext';
 import { useNavigate } from 'react-router-dom';
 
 const SetupImagePage: React.FC = () => {

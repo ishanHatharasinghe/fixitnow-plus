@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Search, User, Edit3, LogOut, Plus, Eye, Shield, Settings, Bell, CheckCheck, CheckCircle, XCircle } from "lucide-react";
+import { Search, User, Edit3, LogOut, Plus, Eye, Shield, Bell, CheckCheck, CheckCircle, XCircle } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { notificationService, type AppNotification } from "../services/notificationService";
 
