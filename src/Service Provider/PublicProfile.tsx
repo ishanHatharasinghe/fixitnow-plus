@@ -1,25 +1,31 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { reviewService } from "../services/reviewService";
-import { postService } from "../services/postService";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { db } from "../firebase";
+import MessageButton from "../Components/MessageButton";
 import {
   MapPin,
   Phone,
   Mail,
   Heart,
   CornerDownLeft,
-  
   User,
   X,
   List,
   Star,
-  ChevronLeft
+  ChevronLeft,
+  Loader,
 } from "lucide-react";
-import ReviewModal from "../Components/ReviewModal";
-import ReviewsList from "../Components/ReviewsList";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,21 +36,137 @@ type ProfileTab = "posts" | "reviews";
 const COVER_IMG =
   "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=1200&q=80";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Bulletproof date converter ───────────────────────────────────────────────
 
-/** Safely convert a Firestore Timestamp or any date-like value to a JS Date */
-function toDate(value: any): Date {
-  if (!value) return new Date();
-  if (typeof value?.toDate === "function") return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
+function toDateSafe(value: any): Date {
+  if (!value) return new Date(0);
+  if (typeof value?.toDate === "function") {
+    try {
+      return value.toDate();
+    } catch {
+      return new Date(0);
+    }
+  }
+  if (value instanceof Date) return isNaN(value.getTime()) ? new Date(0) : value;
+  if (typeof value === "object" && typeof value.seconds === "number") {
+    return new Date(value.seconds * 1000);
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? new Date(0) : d;
+  }
+  return new Date(0);
+}
+
+// ─── Direct Firestore fetchers ────────────────────────────────────────────────
+
+/**
+ * Fetch a single user document safely.
+ * FIX: Maps both `profilePicture` (Firestore field) and `photoURL` (Firebase Auth
+ * field) so the profile image always resolves correctly.
+ */
+async function fetchUserDoc(uid: string): Promise<any | null> {
+  try {
+    const snap = await getDoc(doc(db, "users", uid));
+    if (!snap.exists()) {
+      console.warn("[PublicProfile] No user doc found for uid:", uid);
+      return null;
+    }
+    const data = snap.data();
+    console.log("[PublicProfile] Fetched user doc:", uid, data); // debug — remove after confirming
+    return {
+      ...data,
+      uid: snap.id,
+      // Normalise the profile picture field — Firestore stores it as
+      // `profilePicture`; Firebase Auth uses `photoURL`. Accept both.
+      profilePicture: data.profilePicture || data.photoURL || "",
+      createdAt: toDateSafe(data.createdAt),
+      updatedAt: toDateSafe(data.updatedAt),
+    };
+  } catch (err) {
+    console.error("[PublicProfile] fetchUserDoc error:", err);
+    throw err;
+  }
+}
+
+/**
+ * Fetch posts for a service provider.
+ *
+ * FIX: Removed the second `where("status", "==", "approved")` clause.
+ * Two `where()` clauses on different fields require a composite Firestore index
+ * that is NOT auto-created — the query silently returns 0 results on projects
+ * that haven't manually built that index.
+ * Instead, we fetch by `serviceProviderId` only (single-field index, always
+ * auto-created) and filter `status === "approved"` client-side.
+ */
+async function fetchProviderPosts(serviceProviderId: string): Promise<any[]> {
+  const snap = await getDocs(
+    query(
+      collection(db, "posts"),
+      where("serviceProviderId", "==", serviceProviderId)
+      // ✅ No second where() — avoids composite-index requirement
+    )
+  );
+
+  return snap.docs
+    .map((d) => {
+      const data = d.data();
+      return {
+        ...data,
+        id: d.id,
+        status: data.status || "pending",
+        createdAt: toDateSafe(data.createdAt),
+        updatedAt: toDateSafe(data.updatedAt),
+      };
+    })
+    .filter((p) => p.status === "approved") // ✅ Filter approved client-side
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+/** Fetch reviews for a service provider */
+async function fetchReviews(serviceProviderId: string): Promise<any[]> {
+  const snap = await getDocs(
+    query(
+      collection(db, "reviews"),
+      where("serviceProviderId", "==", serviceProviderId)
+    )
+  );
+  return snap.docs
+    .map((d) => {
+      const data = d.data();
+      return {
+        ...data,
+        id: d.id,
+        createdAt: toDateSafe(data.createdAt),
+      };
+    })
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+/** Submit a new review directly to Firestore */
+async function submitReview(payload: {
+  serviceProviderId: string;
+  reviewerId: string;
+  reviewerName: string;
+  reviewerAvatar: string;
+  comment: string;
+  rating: number;
+}): Promise<void> {
+  await addDoc(collection(db, "reviews"), {
+    ...payload,
+    status: "active",
+    likes: 0,
+    helpful: 0,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
 }
 
 // ─── Full Details Modal ───────────────────────────────────────────────────────
 
 const FullDetailsModal = ({
   card,
-  onClose
+  onClose,
 }: {
   card: any;
   onClose: () => void;
@@ -53,31 +175,75 @@ const FullDetailsModal = ({
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, []);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
   const details = [
-    { label: "Included Services Checklist",              value: Array.isArray(card.checklist) ? card.checklist.join(", ") : (card.includedServices || "Not specified") },
-    { label: "Requirement of Client Provided Materials", value: card.clientMaterials || "Not specified" },
-    { label: "Pricing Model",                            value: card.pricingModel || "Not specified" },
-    { label: "Starting Price",                           value: card.startingPrice ? `LKR ${Number(card.startingPrice).toLocaleString()}` : "Not specified" },
-    { label: "Inspection Fee",                           value: card.inspectionFee ? `LKR ${Number(card.inspectionFee).toLocaleString()}` : "Not specified" },
-    { label: "Specific Cities",                          value: card.specificCities || "Not specified" },
-    { label: "Maximum Travel Distance",                  value: card.travelDistance || "Not specified" },
-    { label: "Available Days",                           value: Array.isArray(card.availableDays) ? card.availableDays.join(", ") : (card.availableDays || "Not specified") },
-    { label: "Available Hours",                          value: card.timeFromHour ? `${card.timeFromHour}:00 ${card.timeFromAmPm} – ${card.timeToHour}:00 ${card.timeToAmPm}` : (card.availableHours || "Not specified") },
-    { label: "Emergency Availability",                   value: card.emergency || "Not specified" }
+    {
+      label: "Included Services Checklist",
+      value: Array.isArray(card.checklist)
+        ? card.checklist.join(", ")
+        : card.includedServices || "Not specified",
+    },
+    {
+      label: "Requirement of Client Provided Materials",
+      value: card.clientMaterials || "Not specified",
+    },
+    { label: "Pricing Model", value: card.pricingModel || "Not specified" },
+    {
+      label: "Starting Price",
+      value: card.startingPrice
+        ? `LKR ${Number(card.startingPrice).toLocaleString()}`
+        : "Not specified",
+    },
+    {
+      label: "Inspection Fee",
+      value: card.inspectionFee
+        ? `LKR ${Number(card.inspectionFee).toLocaleString()}`
+        : "Not specified",
+    },
+    {
+      label: "Specific Cities",
+      value: card.specificCities || "Not specified",
+    },
+    {
+      label: "Maximum Travel Distance",
+      value: card.travelDistance || "Not specified",
+    },
+    {
+      label: "Available Days",
+      value: Array.isArray(card.availableDays)
+        ? card.availableDays.join(", ")
+        : card.availableDays || "Not specified",
+    },
+    {
+      label: "Available Hours",
+      value: card.timeFromHour
+        ? `${card.timeFromHour}:00 ${card.timeFromAmPm} – ${card.timeToHour}:00 ${card.timeToAmPm}`
+        : card.availableHours || "Not specified",
+    },
+    {
+      label: "Emergency Availability",
+      value: card.emergency || "Not specified",
+    },
   ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
       <div className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-[#0072D1]/30 overflow-hidden max-h-[90vh] flex flex-col">
         <button
           onClick={onClose}
@@ -96,19 +262,27 @@ const FullDetailsModal = ({
           </div>
 
           <div className="flex flex-col md:flex-row gap-6 md:gap-8">
-            {/* LEFT: Images */}
+            {/* Images */}
             <div className="w-full md:w-[52%] flex-shrink-0">
               <div className="relative rounded-2xl overflow-hidden bg-gray-100">
                 {card.images && card.images.length > 0 ? (
                   <>
-                    <img src={card.images[activeImg]} alt={card.title} className="w-full h-56 md:h-[360px] object-cover" />
+                    <img
+                      src={card.images[activeImg]}
+                      alt={card.title}
+                      className="w-full h-56 md:h-[360px] object-cover"
+                    />
                     {card.images.length > 1 && (
                       <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
                         {card.images.map((_: any, i: number) => (
                           <button
                             key={i}
                             onClick={() => setActiveImg(i)}
-                            className={`rounded-full transition-all duration-200 ${i === activeImg ? "bg-[#0072D1] w-5 h-2.5" : "bg-gray-400/70 w-2.5 h-2.5 hover:bg-gray-600"}`}
+                            className={`rounded-full transition-all duration-200 ${
+                              i === activeImg
+                                ? "bg-[#0072D1] w-5 h-2.5"
+                                : "bg-gray-400/70 w-2.5 h-2.5 hover:bg-gray-600"
+                            }`}
                           />
                         ))}
                       </div>
@@ -116,29 +290,33 @@ const FullDetailsModal = ({
                   </>
                 ) : (
                   <div className="w-full h-56 md:h-[360px] flex items-center justify-center">
-                    <span className="text-sm text-gray-400">No images uploaded</span>
+                    <span className="text-sm text-gray-400">
+                      No images uploaded
+                    </span>
                   </div>
                 )}
               </div>
               <div className="mt-5">
                 <div className="flex items-center gap-2 mb-2">
                   <List className="w-4 h-4 text-gray-600" />
-                  <h3 className="font-black text-gray-800 text-base">Details</h3>
+                  <h3 className="font-black text-gray-800 text-base">
+                    Details
+                  </h3>
                 </div>
-                <p className="text-sm text-gray-600 leading-relaxed">{card.description}</p>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  {card.description}
+                </p>
               </div>
             </div>
 
-            {/* RIGHT: Info */}
+            {/* Info rows */}
             <div className="flex-1 min-w-0">
               <div className="space-y-3">
                 {details.map(({ label, value }) => (
-                  <div key={label} className="flex flex-col gap-0.5">
-                    <p className="text-sm text-gray-900 leading-snug">
-                      <span className="font-black">{label}: </span>
-                      <span className="font-normal text-gray-700">{value}</span>
-                    </p>
-                  </div>
+                  <p key={label} className="text-sm text-gray-900 leading-snug">
+                    <span className="font-black">{label}: </span>
+                    <span className="font-normal text-gray-700">{value}</span>
+                  </p>
                 ))}
               </div>
               <div className="mt-6 pt-5 border-t border-gray-100">
@@ -161,11 +339,11 @@ const FullDetailsModal = ({
   );
 };
 
-// ─── Post Card (Read-Only — no edit/delete controls) ──────────────────────────
+// ─── Post Card ────────────────────────────────────────────────────────────────
 
 const PostCard = ({
   post,
-  onViewDetails
+  onViewDetails,
 }: {
   post: any;
   onViewDetails: (post: any) => void;
@@ -173,20 +351,24 @@ const PostCard = ({
   <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
     <div className="relative">
       {post.images && post.images.length > 0 ? (
-        <img src={post.images[0]} alt={post.title} className="w-full h-44 object-cover" />
+        <img
+          src={post.images[0]}
+          alt={post.title}
+          className="w-full h-44 object-cover"
+        />
       ) : (
         <div className="w-full h-44 bg-gray-100 flex items-center justify-center">
           <span className="text-sm text-gray-400">No image</span>
         </div>
       )}
-      {/* Read-only status badge — approved posts only, but still show badge */}
       <span className="absolute top-3 left-3 text-xs font-bold px-3 py-1 rounded-full shadow-sm bg-green-100 text-green-800">
         Available
       </span>
     </div>
-
     <div className="p-4 border-x border-b border-[#FF5A00]/30 rounded-b-2xl">
-      <h3 className="font-black text-gray-900 text-base leading-snug mb-1">{post.title}</h3>
+      <h3 className="font-black text-gray-900 text-base leading-snug mb-1">
+        {post.title}
+      </h3>
       <div className="flex items-center gap-1 text-gray-400 text-xs mb-2">
         <MapPin className="w-3 h-3 flex-shrink-0" />
         <span>{post.location}</span>
@@ -218,20 +400,24 @@ const PostCard = ({
 // ─── Review Card ──────────────────────────────────────────────────────────────
 
 const ReviewCard = ({ review }: { review: any }) => {
-  // Firestore reviews use reviewerName; fall back to reviewer for compatibility
   const name = review.reviewerName || review.reviewer || "Anonymous";
   const avatar = review.reviewerAvatar || review.avatar || "";
   const text = review.comment || review.text || "";
-  const time = review.createdAt
-    ? toDate(review.createdAt).toLocaleDateString()
-    : review.time || "";
+  const time =
+    review.createdAt instanceof Date
+      ? review.createdAt.toLocaleDateString()
+      : review.time || "";
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           {avatar ? (
-            <img src={avatar} alt={name} className="w-11 h-11 rounded-full object-cover flex-shrink-0" />
+            <img
+              src={avatar}
+              alt={name}
+              className="w-11 h-11 rounded-full object-cover flex-shrink-0"
+            />
           ) : (
             <div className="w-11 h-11 rounded-full bg-[#0072D1]/10 flex items-center justify-center flex-shrink-0">
               <User className="w-5 h-5 text-[#0072D1]" />
@@ -242,11 +428,17 @@ const ReviewCard = ({ review }: { review: any }) => {
             <p className="text-xs text-gray-400">{time}</p>
           </div>
         </div>
-        {/* Star rating */}
         {review.rating && (
           <div className="flex gap-0.5">
             {[1, 2, 3, 4, 5].map((s) => (
-              <Star key={s} className={`w-3.5 h-3.5 ${review.rating >= s ? "text-yellow-400 fill-yellow-400" : "text-gray-200"}`} />
+              <Star
+                key={s}
+                className={`w-3.5 h-3.5 ${
+                  review.rating >= s
+                    ? "text-yellow-400 fill-yellow-400"
+                    : "text-gray-200"
+                }`}
+              />
             ))}
           </div>
         )}
@@ -272,7 +464,7 @@ const AddReviewModal = ({
   onClose,
   serviceProviderId,
   serviceProviderName,
-  onReviewAdded
+  onReviewAdded,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -281,20 +473,24 @@ const AddReviewModal = ({
   onReviewAdded?: () => void;
 }) => {
   const { currentUser } = useAuth();
-  const [name, setName] = React.useState(currentUser?.displayName || "");
-  const [reviewText, setReviewText] = React.useState("");
-  const [rating, setRating] = React.useState(5);
-  const [submitting, setSubmitting] = React.useState(false);
+  const [name, setName] = useState(currentUser?.displayName || "");
+  const [reviewText, setReviewText] = useState("");
+  const [rating, setRating] = useState(5);
+  const [submitting, setSubmitting] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
-      return () => { document.body.style.overflow = ""; };
+      return () => {
+        document.body.style.overflow = "";
+      };
     }
   }, [isOpen]);
 
-  React.useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
     if (isOpen) {
       window.addEventListener("keydown", h);
       return () => window.removeEventListener("keydown", h);
@@ -305,13 +501,13 @@ const AddReviewModal = ({
     if (!name.trim() || !reviewText.trim() || !currentUser) return;
     setSubmitting(true);
     try {
-      await reviewService.createReview({
-        serviceProviderId: serviceProviderId,
+      await submitReview({
+        serviceProviderId,
         reviewerId: currentUser.uid,
-        reviewerName: name,
-        comment: reviewText,
-        rating: rating,
-        reviewerAvatar: currentUser.photoURL || ""
+        reviewerName: name.trim(),
+        reviewerAvatar: currentUser.photoURL || "",
+        comment: reviewText.trim(),
+        rating,
       });
       onReviewAdded?.();
       onClose();
@@ -330,16 +526,16 @@ const AddReviewModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
       <div className="relative z-10 w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 md:p-8">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 w-9 h-9 rounded-full border-2 border-[#0072D1]
-            flex items-center justify-center text-[#0072D1] hover:bg-[#0072D1] hover:text-white transition-colors"
+          className="absolute top-4 right-4 w-9 h-9 rounded-full border-2 border-[#0072D1] flex items-center justify-center text-[#0072D1] hover:bg-[#0072D1] hover:text-white transition-colors"
         >
-          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
-          </svg>
+          <X className="w-4 h-4" />
         </button>
 
         <div className="text-center mb-6">
@@ -347,52 +543,63 @@ const AddReviewModal = ({
           <p className="text-sm text-gray-500">for {serviceProviderName}</p>
         </div>
 
-        {/* Star rating picker */}
         <div className="mb-5">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">Rating</label>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Rating
+          </label>
           <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map((star) => (
-              <button key={star} onClick={() => setRating(star)} className="focus:outline-none">
-                <Star className={`w-7 h-7 transition-colors ${rating >= star ? "text-yellow-500 fill-yellow-500" : "text-gray-300"}`} />
+              <button
+                key={star}
+                onClick={() => setRating(star)}
+                className="focus:outline-none"
+              >
+                <Star
+                  className={`w-7 h-7 transition-colors ${
+                    rating >= star
+                      ? "text-yellow-500 fill-yellow-500"
+                      : "text-gray-300"
+                  }`}
+                />
               </button>
             ))}
           </div>
         </div>
 
-        {/* Name */}
         <div className="mb-5">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">Your Name</label>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Your Name
+          </label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Enter your name"
-            className="w-full border border-[#0072D1]/40 rounded-2xl px-4 py-3 text-sm text-gray-700
-              outline-none focus:border-[#0072D1] focus:ring-2 focus:ring-[#0072D1]/15 transition-colors bg-gray-50"
+            className="w-full border border-[#0072D1]/40 rounded-2xl px-4 py-3 text-sm text-gray-700 outline-none focus:border-[#0072D1] focus:ring-2 focus:ring-[#0072D1]/15 transition-colors bg-gray-50"
           />
         </div>
 
-        {/* Review text */}
         <div className="mb-7">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">Your Review</label>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Your Review
+          </label>
           <textarea
             value={reviewText}
             onChange={(e) => setReviewText(e.target.value)}
             rows={4}
             placeholder="Share your experience with this service provider…"
-            className="w-full border border-[#0072D1]/40 rounded-2xl px-4 py-3 text-sm text-gray-700
-              outline-none focus:border-[#0072D1] focus:ring-2 focus:ring-[#0072D1]/15 transition-colors bg-gray-50 resize-none"
+            className="w-full border border-[#0072D1]/40 rounded-2xl px-4 py-3 text-sm text-gray-700 outline-none focus:border-[#0072D1] focus:ring-2 focus:ring-[#0072D1]/15 transition-colors bg-gray-50 resize-none"
           />
         </div>
 
         <button
           onClick={handleSubmit}
           disabled={submitting || !name.trim() || !reviewText.trim()}
-          className="relative overflow-hidden w-full bg-[#0072D1] text-white font-bold
-            py-3.5 rounded-2xl text-sm transition-all duration-300 hover:bg-black
-            hover:scale-[1.01] group shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+          className="relative overflow-hidden w-full bg-[#0072D1] text-white font-bold py-3.5 rounded-2xl text-sm transition-all duration-300 hover:bg-black hover:scale-[1.01] group shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <span className="relative z-10">{submitting ? "Submitting…" : "Submit Review"}</span>
+          <span className="relative z-10">
+            {submitting ? "Submitting…" : "Submit Review"}
+          </span>
           <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700 rounded-2xl" />
         </button>
       </div>
@@ -405,7 +612,7 @@ const AddReviewModal = ({
 const Pagination = ({
   current,
   total,
-  onChange
+  onChange,
 }: {
   current: number;
   total: number;
@@ -442,13 +649,9 @@ const Pagination = ({
   </div>
 );
 
-// ─── About Panel (Read-Only) ──────────────────────────────────────────────────
+// ─── About Panel ──────────────────────────────────────────────────────────────
 
-const AboutPanel = ({
-  providerData
-}: {
-  providerData: any;
-}) => (
+const AboutPanel = ({ providerData }: { providerData: any }) => (
   <div className="space-y-4">
     {providerData?.bio && (
       <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
@@ -465,20 +668,18 @@ const AboutPanel = ({
           <h3 className="font-bold text-gray-900 text-sm">Phone</h3>
           <Phone className="w-5 h-5 text-gray-400" />
         </div>
-        <p className="text-xs text-gray-600 leading-relaxed">
+        <p className="text-xs text-gray-600">
           {providerData.phoneNumber || providerData.phone}
         </p>
       </div>
     )}
-    {(providerData?.email) && (
+    {providerData?.email && (
       <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold text-gray-900 text-sm">Email</h3>
           <Mail className="w-5 h-5 text-gray-400" />
         </div>
-        <p className="text-xs text-gray-600 leading-relaxed break-all">
-          {providerData.email}
-        </p>
+        <p className="text-xs text-gray-600 break-all">{providerData.email}</p>
       </div>
     )}
     {providerData?.address && (
@@ -490,25 +691,35 @@ const AboutPanel = ({
         <p className="text-xs text-gray-600 leading-relaxed">
           {typeof providerData.address === "string"
             ? providerData.address
-            : `${providerData.address.street || ""}, ${providerData.address.city || ""}, ${providerData.address.country || ""}`}
+            : [
+                providerData.address.street,
+                providerData.address.city,
+                providerData.address.country,
+              ]
+                .filter(Boolean)
+                .join(", ")}
         </p>
       </div>
     )}
-    {providerData?.availableServices && providerData.availableServices.length > 0 && (
-      <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-gray-900 text-sm">Services Offered</h3>
-          <List className="w-5 h-5 text-gray-400" />
+    {providerData?.availableServices &&
+      providerData.availableServices.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-gray-900 text-sm">Services Offered</h3>
+            <List className="w-5 h-5 text-gray-400" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {providerData.availableServices.map((service: string, i: number) => (
+              <span
+                key={i}
+                className="px-2 py-1 bg-[#0072D1]/10 text-[#0072D1] text-xs rounded-full"
+              >
+                {service}
+              </span>
+            ))}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {providerData.availableServices.map((service: string, index: number) => (
-            <span key={index} className="px-2 py-1 bg-[#0072D1]/10 text-[#0072D1] text-xs rounded-full">
-              {service}
-            </span>
-          ))}
-        </div>
-      </div>
-    )}
+      )}
   </div>
 );
 
@@ -517,7 +728,7 @@ const AboutPanel = ({
 const RatingSummary = ({
   averageRating,
   reviews,
-  onAddReview
+  onAddReview,
 }: {
   averageRating: number;
   reviews: any[];
@@ -528,14 +739,17 @@ const RatingSummary = ({
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-1">
           <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
-          <span className="text-lg font-bold text-gray-900">{averageRating.toFixed(1)}</span>
+          <span className="text-lg font-bold text-gray-900">
+            {averageRating.toFixed(1)}
+          </span>
         </div>
-        <span className="text-sm text-gray-600">({reviews.length} review{reviews.length !== 1 ? "s" : ""})</span>
+        <span className="text-sm text-gray-600">
+          ({reviews.length} review{reviews.length !== 1 ? "s" : ""})
+        </span>
       </div>
       <button
         onClick={onAddReview}
-        className="relative overflow-hidden flex items-center gap-1.5 bg-black text-white text-xs
-        font-bold px-4 py-2.5 rounded-xl transition-all duration-300 hover:bg-[#0072D1] hover:scale-105 group"
+        className="relative overflow-hidden flex items-center gap-1.5 bg-black text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all duration-300 hover:bg-[#0072D1] hover:scale-105 group"
       >
         <Star className="w-3.5 h-3.5 relative z-10" />
         <span className="relative z-10">Add Review</span>
@@ -543,21 +757,26 @@ const RatingSummary = ({
       </button>
     </div>
     <div className="flex items-center gap-4 text-xs text-gray-600 flex-wrap">
-      {[5, 4, 3, 2, 1].map((star) => (
-        <div key={star} className="flex items-center gap-2">
-          <span className="flex items-center gap-1">
-            <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-            <span>{star}</span>
-          </span>
-          <div className="w-16 bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-yellow-400 h-2 rounded-full"
-              style={{ width: `${(reviews.filter(r => r.rating === star).length / Math.max(reviews.length, 1)) * 100}%` }}
-            />
+      {[5, 4, 3, 2, 1].map((star) => {
+        const count = reviews.filter((r) => r.rating === star).length;
+        return (
+          <div key={star} className="flex items-center gap-2">
+            <span className="flex items-center gap-1">
+              <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+              <span>{star}</span>
+            </span>
+            <div className="w-16 bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-yellow-400 h-2 rounded-full"
+                style={{
+                  width: `${(count / Math.max(reviews.length, 1)) * 100}%`,
+                }}
+              />
+            </div>
+            <span>{count}</span>
           </div>
-          <span>{reviews.filter(r => r.rating === star).length}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   </div>
 );
@@ -577,102 +796,134 @@ const PublicProfile: React.FC = () => {
   const [coverSrc, setCoverSrc] = useState<string>(COVER_IMG);
   const [profileImageSrc, setProfileImageSrc] = useState<string>("");
 
+  // ── Provider ──────────────────────────────────────────────────────────────
   const [providerData, setProviderData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadingProvider, setLoadingProvider] = useState(true);
+  const [providerError, setProviderError] = useState<string | null>(null);
 
+  // ── Posts ─────────────────────────────────────────────────────────────────
   const [providerPosts, setProviderPosts] = useState<any[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
+  const [postsError, setPostsError] = useState<string | null>(null);
 
+  // ── Reviews ───────────────────────────────────────────────────────────────
   const [reviews, setReviews] = useState<any[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
-  const [averageRating, setAverageRating] = useState<number>(0);
+  const [averageRating, setAverageRating] = useState(0);
 
   // ── Fetch provider profile ─────────────────────────────────────────────────
 
   useEffect(() => {
-    const fetchProviderData = async () => {
-      if (!serviceProviderId) return;
-      try {
-        setLoading(true);
-        const userDoc = await getDoc(doc(db, "users", serviceProviderId));
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          setProviderData(data);
-          if (data.coverImage) setCoverSrc(data.coverImage);
-          if (data.photoURL)   setProfileImageSrc(data.photoURL);
-        } else {
-          setError("Service provider not found.");
+    if (!serviceProviderId) return;
+
+    setLoadingProvider(true);
+    setProviderError(null);
+    setProviderData(null);
+
+    fetchUserDoc(serviceProviderId)
+      .then((data) => {
+        if (!data) {
+          setProviderError("Service provider not found.");
+          return;
         }
-      } catch (err) {
-        console.error("Error fetching provider data:", err);
-        setError("Failed to load provider data.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProviderData();
+
+        setProviderData(data);
+
+        // FIX: use `profilePicture` (Firestore field) with `photoURL` as fallback
+        if (data.profilePicture) {
+          setProfileImageSrc(data.profilePicture);
+        } else if (data.photoURL) {
+          setProfileImageSrc(data.photoURL);
+        }
+
+        // Optional cover image
+        if (data.coverImage) {
+          setCoverSrc(data.coverImage);
+        }
+      })
+      .catch((err) => {
+        console.error("[PublicProfile] Provider fetch error:", err);
+        setProviderError("Failed to load provider profile. Please try again.");
+      })
+      .finally(() => setLoadingProvider(false));
   }, [serviceProviderId]);
 
-  // ── Fetch approved posts only ──────────────────────────────────────────────
+  // ── Fetch posts ────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const fetchProviderPosts = async () => {
-      if (!serviceProviderId) return;
-      try {
-        setLoadingPosts(true);
-        const allPosts = await postService.getPostsByServiceProvider(serviceProviderId);
-        // Public profile only shows approved posts
-        setProviderPosts(allPosts.filter((p) => p.status === "approved"));
-      } catch (err) {
-        console.error("Error fetching provider posts:", err);
-      } finally {
-        setLoadingPosts(false);
-      }
-    };
-    fetchProviderPosts();
+    if (!serviceProviderId) return;
+
+    setLoadingPosts(true);
+    setPostsError(null);
+
+    // FIX: use renamed function that filters approved client-side (no composite index needed)
+    fetchProviderPosts(serviceProviderId)
+      .then(setProviderPosts)
+      .catch((err) => {
+        console.error("[PublicProfile] Posts fetch error:", err);
+        setPostsError("Failed to load posts. Please try again.");
+      })
+      .finally(() => setLoadingPosts(false));
   }, [serviceProviderId]);
 
   // ── Fetch reviews ──────────────────────────────────────────────────────────
 
-  const fetchReviews = async () => {
+  const loadReviews = () => {
     if (!serviceProviderId) return;
-    try {
-      setLoadingReviews(true);
-      const serviceProviderReviews = await reviewService.getReviewsByServiceProvider(serviceProviderId);
-      setReviews(serviceProviderReviews);
-      const stats = await reviewService.getReviewStats(serviceProviderId);
-      setAverageRating(stats.averageRating);
-    } catch (error) {
-      console.error("Error fetching reviews:", error);
-    } finally {
-      setLoadingReviews(false);
-    }
+    setLoadingReviews(true);
+
+    fetchReviews(serviceProviderId)
+      .then((data) => {
+        setReviews(data);
+        const avg =
+          data.length
+            ? data.reduce((sum: number, r: any) => sum + (r.rating || 0), 0) /
+              data.length
+            : 0;
+        setAverageRating(avg);
+      })
+      .catch((err) => console.error("[PublicProfile] Reviews fetch error:", err))
+      .finally(() => setLoadingReviews(false));
   };
 
-  useEffect(() => { fetchReviews(); }, [serviceProviderId]);
+  useEffect(() => {
+    loadReviews();
+  }, [serviceProviderId]);
 
   // ── Derived values ─────────────────────────────────────────────────────────
 
-  const providerName = [
-    providerData?.displayName || providerData?.firstName || "",
-    providerData?.lastName || ""
-  ].filter(Boolean).join(" ") || "Service Provider";
+  // FIX: don't fall back to "Service Provider" string when data is loading or
+  // errored — show nothing so the error message is the only signal shown.
+  const providerName = providerData
+    ? [
+        providerData.displayName || providerData.firstName || "",
+        providerData.lastName || "",
+      ]
+        .filter(Boolean)
+        .join(" ") || "Unnamed Provider"
+    : "";
 
   const primaryService = providerData?.availableServices?.[0] || "";
 
   const TABS: { key: ProfileTab; label: string }[] = [
-    { key: "posts",   label: "Posts" },
+    { key: "posts", label: "Posts" },
     { key: "reviews", label: "Reviews" },
   ];
 
-  // ── Back button ────────────────────────────────────────────────────────────
+  // Paginate posts (6 per page)
+  const POSTS_PER_PAGE = 6;
+  const pagedPosts = providerPosts.slice(
+    (page - 1) * POSTS_PER_PAGE,
+    page * POSTS_PER_PAGE
+  );
+  const totalPages = Math.max(1, Math.ceil(providerPosts.length / POSTS_PER_PAGE));
+
+  // ── Sub-components ─────────────────────────────────────────────────────────
 
   const BackBtn = () => (
     <button
       onClick={() => navigate("/browseplace")}
-      className="relative overflow-hidden flex items-center gap-1.5 bg-[#0072D1] text-white text-xs
-      font-bold px-4 py-2.5 rounded-xl transition-all duration-300 hover:bg-black hover:scale-105 group"
+      className="relative overflow-hidden flex items-center gap-1.5 bg-[#0072D1] text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all duration-300 hover:bg-black hover:scale-105 group"
     >
       <ChevronLeft className="w-3.5 h-3.5 relative z-10" />
       <span className="relative z-10">Back to Browse</span>
@@ -683,9 +934,9 @@ const PublicProfile: React.FC = () => {
   const AddReviewBtn = ({ small = false }: { small?: boolean }) => (
     <button
       onClick={() => setShowReviewModal(true)}
-      className={`relative overflow-hidden flex items-center gap-1.5 bg-black text-white
-      font-bold rounded-xl transition-all duration-300 hover:bg-[#0072D1] hover:scale-105 group
-      ${small ? "text-xs px-3 py-2" : "text-xs px-4 py-2.5"}`}
+      className={`relative overflow-hidden flex items-center gap-1.5 bg-black text-white font-bold rounded-xl transition-all duration-300 hover:bg-[#0072D1] hover:scale-105 group ${
+        small ? "text-xs px-3 py-2" : "text-xs px-4 py-2.5"
+      }`}
     >
       <Star className="w-3.5 h-3.5 relative z-10" />
       <span className="relative z-10">Add Review</span>
@@ -693,44 +944,72 @@ const PublicProfile: React.FC = () => {
     </button>
   );
 
-  // ── Posts content (shared between desktop + mobile) ────────────────────────
-
   const PostsContent = () => (
     <>
       {loadingPosts ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#0072D1]"></div>
+          <Loader className="w-6 h-6 text-[#0072D1] animate-spin" />
+        </div>
+      ) : postsError ? (
+        <div className="text-center py-12">
+          <p className="text-red-500 text-sm font-bold">{postsError}</p>
+          <button
+            onClick={() => {
+              setPostsError(null);
+              setLoadingPosts(true);
+              fetchProviderPosts(serviceProviderId!)
+                .then(setProviderPosts)
+                .catch(() => setPostsError("Failed to load posts. Please try again."))
+                .finally(() => setLoadingPosts(false));
+            }}
+            className="mt-3 text-xs text-[#0072D1] underline"
+          >
+            Retry
+          </button>
         </div>
       ) : providerPosts.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <p className="font-bold text-gray-600 mb-1">No posts yet</p>
-          <p className="text-sm">This service provider has no approved listings.</p>
+          <p className="text-sm">
+            This service provider has no approved listings.
+          </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {providerPosts.map((p) => (
-            <PostCard key={p.id} post={p} onViewDetails={setSelectedPost} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {pagedPosts.map((p) => (
+              <PostCard key={p.id} post={p} onViewDetails={setSelectedPost} />
+            ))}
+          </div>
+          <Pagination current={page} total={totalPages} onChange={setPage} />
+        </>
       )}
-      <Pagination
-        current={page}
-        total={Math.max(1, Math.ceil(providerPosts.length / 6))}
-        onChange={setPage}
-      />
     </>
   );
 
-  // ── Reviews content (shared) ───────────────────────────────────────────────
-
   const ReviewsContent = () => (
     <>
-      <ReviewsList
-        serviceProviderId={serviceProviderId || ""}
-        serviceProviderName={providerName}
-        onReviewAdded={fetchReviews}
-        readOnly={false}
+      <RatingSummary
+        averageRating={averageRating}
+        reviews={reviews}
+        onAddReview={() => setShowReviewModal(true)}
       />
+      {loadingReviews ? (
+        <div className="flex justify-center py-12">
+          <Loader className="w-6 h-6 text-[#0072D1] animate-spin" />
+        </div>
+      ) : reviews.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="font-bold text-gray-600 mb-1">No reviews yet</p>
+          <p className="text-sm text-gray-400">Be the first to leave a review.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {reviews.map((r) => (
+            <ReviewCard key={r.id} review={r} />
+          ))}
+        </div>
+      )}
     </>
   );
 
@@ -738,16 +1017,23 @@ const PublicProfile: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
-
-      {/* ── Cover + Avatar ── */}
+      {/* Cover + Avatar */}
       <div className="relative w-full">
         <div className="w-full h-36 md:h-52 overflow-hidden">
-          <img src={coverSrc} alt="Cover" className="w-full h-full object-cover" />
+          <img
+            src={coverSrc}
+            alt="Cover"
+            className="w-full h-full object-cover"
+          />
         </div>
         <div className="absolute left-6 md:left-8 -bottom-12 md:-bottom-16">
           <div className="w-24 h-24 md:w-36 md:h-36 rounded-[22px] md:rounded-[28px] border-4 border-[#0072D1] bg-white shadow-xl overflow-hidden">
             {profileImageSrc ? (
-              <img src={profileImageSrc} alt="Profile" className="w-full h-full object-cover" />
+              <img
+                src={profileImageSrc}
+                alt="Profile"
+                className="w-full h-full object-cover"
+              />
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gray-100">
                 <User className="w-10 h-10 text-gray-400" />
@@ -759,21 +1045,24 @@ const PublicProfile: React.FC = () => {
 
       {/* ── DESKTOP layout ── */}
       <div className="hidden md:flex gap-6 max-w-7xl mx-auto px-6 mt-20 pb-12">
-
         {/* LEFT sidebar */}
         <aside className="w-64 flex-shrink-0">
           <div className="text-center mb-5">
-            {loading ? (
+            {loadingProvider ? (
               <div className="flex justify-center h-16 items-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#0072D1]"></div>
+                <Loader className="w-6 h-6 text-[#0072D1] animate-spin" />
               </div>
-            ) : error ? (
-              <p className="text-red-500 text-sm">{error}</p>
+            ) : providerError ? (
+              <p className="text-red-500 text-sm font-semibold">{providerError}</p>
             ) : (
               <>
-                <h2 className="text-xl font-black text-gray-900">{providerName}</h2>
+                <h2 className="text-xl font-black text-gray-900">
+                  {providerName}
+                </h2>
                 {primaryService && (
-                  <p className="text-base font-bold text-gray-600 mt-1">{primaryService}</p>
+                  <p className="text-base font-bold text-gray-600 mt-1">
+                    {primaryService}
+                  </p>
                 )}
               </>
             )}
@@ -783,13 +1072,15 @@ const PublicProfile: React.FC = () => {
 
         {/* RIGHT content */}
         <div className="flex-1 min-w-0">
-          {/* Tab bar + action buttons */}
           <div className="flex items-center justify-between border-b border-gray-200 mb-6">
             <div className="flex">
               {TABS.map((t) => (
                 <button
                   key={t.key}
-                  onClick={() => { setTab(t.key); setPage(1); }}
+                  onClick={() => {
+                    setTab(t.key);
+                    setPage(1);
+                  }}
                   className={`px-5 py-3 text-sm font-bold border-b-2 transition-all ${
                     tab === t.key
                       ? "text-gray-900 border-gray-900"
@@ -802,45 +1093,60 @@ const PublicProfile: React.FC = () => {
             </div>
             <div className="flex items-center gap-3 pb-1">
               <BackBtn />
+              <MessageButton
+                serviceProviderId={serviceProviderId || ''}
+                serviceProviderName={providerName}
+              />
               <AddReviewBtn />
             </div>
           </div>
 
-          {tab === "posts"   && <PostsContent />}
+          {tab === "posts" && <PostsContent />}
           {tab === "reviews" && <ReviewsContent />}
         </div>
       </div>
 
       {/* ── MOBILE layout ── */}
       <div className="md:hidden">
-        {/* Name + action buttons */}
         <div className="flex flex-col items-center pt-14 pb-3 px-4">
-          {loading ? (
+          {loadingProvider ? (
             <div className="flex justify-center h-12 items-center">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#0072D1]"></div>
+              <Loader className="w-5 h-5 text-[#0072D1] animate-spin" />
             </div>
-          ) : error ? (
-            <p className="text-red-500 text-sm">{error}</p>
+          ) : providerError ? (
+            <p className="text-red-500 text-sm font-semibold">{providerError}</p>
           ) : (
             <>
               <h2 className="text-base font-black text-gray-900 text-center">
                 {providerName}
-                {primaryService && <span className="font-normal text-gray-600"> · {primaryService}</span>}
+                {primaryService && (
+                  <span className="font-normal text-gray-600">
+                    {" "}
+                    · {primaryService}
+                  </span>
+                )}
               </h2>
               <div className="flex gap-2 mt-2">
                 <BackBtn />
+                <MessageButton
+                  serviceProviderId={serviceProviderId || ''}
+                  serviceProviderName={providerName}
+                  size="sm"
+                />
                 <AddReviewBtn small />
               </div>
             </>
           )}
         </div>
 
-        {/* Mobile tabs */}
         <div className="flex border-b border-gray-200">
           {TABS.map((t) => (
             <button
               key={t.key}
-              onClick={() => { setTab(t.key); setPage(1); }}
+              onClick={() => {
+                setTab(t.key);
+                setPage(1);
+              }}
               className={`flex-1 py-3 text-xs font-bold border-b-2 transition-all ${
                 tab === t.key
                   ? "text-[#0072D1] border-[#0072D1]"
@@ -852,26 +1158,28 @@ const PublicProfile: React.FC = () => {
           ))}
         </div>
 
-        {/* Mobile tab content */}
         <div className="px-4 pt-4 pb-12 space-y-4">
-          {tab === "posts"   && <PostsContent />}
+          {tab === "posts" && <PostsContent />}
           {tab === "reviews" && <ReviewsContent />}
         </div>
       </div>
 
-      {/* ── Full Details Modal ── */}
+      {/* Full Details Modal */}
       {selectedPost && (
-        <FullDetailsModal card={selectedPost} onClose={() => setSelectedPost(null)} />
+        <FullDetailsModal
+          card={selectedPost}
+          onClose={() => setSelectedPost(null)}
+        />
       )}
 
-      {/* ── Review Modal ── */}
+      {/* Add Review Modal */}
       {showReviewModal && serviceProviderId && (
-        <ReviewModal
+        <AddReviewModal
           isOpen={showReviewModal}
           onClose={() => setShowReviewModal(false)}
           serviceProviderId={serviceProviderId}
           serviceProviderName={providerName}
-          onReviewAdded={fetchReviews}
+          onReviewAdded={loadReviews}
         />
       )}
     </div>

@@ -65,11 +65,15 @@ export const userService = {
     
     if (userSnap.exists()) {
       const data = userSnap.data();
+      console.log('[userService.getUser] raw Firestore data:', data);
       return {
         ...data,
-        createdAt: data.createdAt.toDate(),
-        updatedAt: data.updatedAt.toDate(),
-        uid: userSnap.id
+        uid: userSnap.id,
+        createdAt: data.createdAt?.toDate?.() ?? new Date(),
+        updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
+        nic: data.nic || data.idNumber || '',
+        availableServices: data.availableServices ?? data.services ?? [],
+        displayName: data.displayName || data.firstName || '',
       } as UserProfile;
     }
     return null;

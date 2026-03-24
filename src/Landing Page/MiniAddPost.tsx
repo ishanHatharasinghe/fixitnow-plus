@@ -1,7 +1,28 @@
 import { ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 import Human from "../assets/Mini Share Add/human image.png";
 
 const ShareYourAdd = () => {
+  const navigate = useNavigate();
+  const { currentUser, userRole, loading } = useAuth();
+
+  const handleAddPostClick = () => {
+    // If user is not logged in, navigate to select role page
+    if (!currentUser) {
+      navigate("/select-role");
+      return;
+    }
+
+    // If user is logged in, check their role
+    if (userRole === "service_provider" || userRole === "admin") {
+      navigate("/add-post");
+    } else {
+      // For seekers or unknown roles, show an alert or message
+      alert("Only service providers and administrators can create posts.");
+    }
+  };
+
   return (
     <section className="w-full max-w-[1400px] mx-auto px-6 py-12 md:py-20 font-sans overflow-hidden">
       {/* Desktop Layout */}
@@ -38,7 +59,11 @@ const ShareYourAdd = () => {
 
         {/* Add Post Button — overlaid above fade */}
         <div className="relative z-30 -mt-16">
-          <button className="relative overflow-hidden flex items-center justify-center gap-3 px-10 py-4 rounded-full border-2 border-[#0072D1] bg-white text-[#0072D1] font-bold text-lg transition-all duration-300 hover:bg-black hover:text-white hover:border-black hover:scale-105 group shadow-lg">
+          <button 
+            onClick={handleAddPostClick}
+            disabled={loading}
+            className="relative overflow-hidden flex items-center justify-center gap-3 px-10 py-4 rounded-full border-2 border-[#0072D1] bg-white text-[#0072D1] font-bold text-lg transition-all duration-300 hover:bg-black hover:text-white hover:border-black hover:scale-105 group shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <div className="bg-[#0072D1] text-white rounded-full p-1.5 group-hover:bg-white group-hover:text-black transition-colors duration-300 flex-shrink-0">
               <ArrowRight className="w-5 h-5" strokeWidth={3} />
             </div>
@@ -68,7 +93,11 @@ const ShareYourAdd = () => {
         </p>
 
         {/* Add Post Button */}
-        <button className="relative overflow-hidden flex items-center justify-center gap-3 px-8 py-3.5 rounded-full border-2 border-[#0072D1] bg-white text-[#0072D1] font-bold text-base transition-all duration-300 hover:bg-black hover:text-white hover:border-black hover:scale-105 group shadow-lg mb-8">
+        <button 
+          onClick={handleAddPostClick}
+          disabled={loading}
+          className="relative overflow-hidden flex items-center justify-center gap-3 px-8 py-3.5 rounded-full border-2 border-[#0072D1] bg-white text-[#0072D1] font-bold text-base transition-all duration-300 hover:bg-black hover:text-white hover:border-black hover:scale-105 group shadow-lg mb-8 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <div className="bg-[#0072D1] text-white rounded-full p-1.5 group-hover:bg-white group-hover:text-black transition-colors duration-300 flex-shrink-0">
             <ArrowRight className="w-4 h-4" strokeWidth={3} />
           </div>

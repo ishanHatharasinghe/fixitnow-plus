@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { SignupProvider } from "./contexts/SignupContext";
+import { MessagingProvider } from "./contexts/MessagingContext";
 import ProtectedRoute from "./Components/ProtectedRoute";
 import RoleBasedRoute from "./Components/RoleBasedRoute";
 import NavBar from "./Components/NavBar";
@@ -24,6 +25,9 @@ import EditProfile from "./Service Provider/EditProfile";
 import AddPost from "./Service Provider/PostAdd";
 import PublicProfile from "./Service Provider/PublicProfile";
 import AdminDashboard from "./Admin/AdminDashboard";
+import FAQ from "./Pages/FAQ";
+import PrivacyPolicy from "./Pages/PrivacyPolicy";
+import Footer from "./Components/Footer";
 
 // Placeholder components for protected routes
 const SeekerDashboard = () => {
@@ -47,10 +51,12 @@ function App() {
 
   return (
     <AuthProvider>
-      <SignupProvider>
-        <div className="App">
-          <NavBar />
-          <Routes>
+      <MessagingProvider>
+        <SignupProvider>
+          <div className="App min-h-screen flex flex-col">
+            <NavBar />
+            <main className="flex-1">
+              <Routes>
 
             {/* ── Public routes ─────────────────────────────────────────────── */}
 
@@ -217,6 +223,20 @@ function App() {
               </ProtectedRoute>
             } />
 
+            {/* ── FAQ and Privacy Policy ──────────────────────────────────────── */}
+
+            <Route path="/faq" element={
+              <ProtectedRoute requireAuth={false}>
+                <FAQ />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/privacy-policy" element={
+              <ProtectedRoute requireAuth={false}>
+                <PrivacyPolicy />
+              </ProtectedRoute>
+            } />
+
             {/* ── Catch-all ─────────────────────────────────────────────────── */}
 
             <Route path="*" element={
@@ -225,9 +245,10 @@ function App() {
               </ProtectedRoute>
             } />
 
-          </Routes>
-        </div>
+          </Routes>          </main>
+          <Footer />        </div>
       </SignupProvider>
+      </MessagingProvider>
     </AuthProvider>
   );
 }

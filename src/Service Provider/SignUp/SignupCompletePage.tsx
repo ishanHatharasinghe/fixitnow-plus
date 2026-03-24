@@ -14,7 +14,7 @@ const SignupCompletePage: React.FC = () => {
   useEffect(() => {
     // Auto-navigate to profile after exactly 3 seconds
     const timer = setTimeout(() => {
-      navigate('/profile');
+      navigate('/edit-profile');
     }, 3000);
 
     // Cleanup timer if component unmounts before navigation

@@ -17,7 +17,6 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
-  LogOut,
   Menu,
   Loader,
   ArrowUpRight,
@@ -29,21 +28,110 @@ import {
   FileText,
   CalendarDays,
 } from "lucide-react";
-import { postService, type Post } from "../services/postService";
-import { userService } from "../services/userService";
+import { collection, getDocs, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../firebase";
 import AdminPostManagement from "./AdminPostManagement";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Section = "overview" | "providers" | "customers" | "posts" | "approval";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+export interface Post {
+  id: string;
+  title: string;
+  category: string;
+  specializations?: string;
+  location: string;
+  specificCities?: string;
+  travelDistance?: string;
+  pricingModel?: string;
+  description?: string;
+  keywords?: string;
+  checklist: string[];
+  clientMaterials: string;
+  timeFromHour: string;
+  timeFromAmPm: string;
+  timeToHour: string;
+  timeToAmPm: string;
+  availableDays: string[];
+  startingPrice?: string;
+  inspectionFee?: string;
+  emergency: string;
+  ownerName: string;
+  ownerAddress?: string;
+  nic?: string;
+  mobile: string;
+  email: string;
+  images: string[];
+  pdf?: string;
+  status: "pending" | "approved" | "rejected" | "draft";
+  serviceProviderId: string;
+  createdAt: Date;
+  updatedAt: Date;
+  rejectionReason?: string;
+}
 
+export interface UserProfile {
+  uid: string;
+  email: string;
+  role: string;
+  displayName?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ─── KEY FIX: bulletproof date converter ─────────────────────────────────────
+// Handles: Firestore Timestamp, JS Date, ISO string, number (ms), null/undefined
 function toDateSafe(value: any): Date {
-  if (!value) return new Date();
-  if (typeof value?.toDate === "function") return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
+  if (!value) return new Date(0);
+  // Firestore Timestamp object
+  if (typeof value?.toDate === "function") {
+    try { return value.toDate(); } catch { return new Date(0); }
+  }
+  if (value instanceof Date) return isNaN(value.getTime()) ? new Date(0) : value;
+  // Firestore Timestamp stored as plain object { seconds, nanoseconds }
+  if (typeof value === "object" && typeof value.seconds === "number") {
+    return new Date(value.seconds * 1000);
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? new Date(0) : d;
+  }
+  return new Date(0);
+}
+
+// ─── KEY FIX: fetch ALL users directly from Firestore ────────────────────────
+// Bypasses userService which crashes on non-Timestamp createdAt values
+async function fetchAllUsers(): Promise<UserProfile[]> {
+  const snap = await getDocs(collection(db, "users"));
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      uid: d.id,
+      email: data.email || "",
+      role: data.role || "",
+      displayName: data.displayName || data.email || "",
+      createdAt: toDateSafe(data.createdAt),
+      updatedAt: toDateSafe(data.updatedAt),
+      ...data,
+    } as UserProfile;
+  });
+}
+
+// ─── KEY FIX: fetch ALL posts directly — no orderBy to avoid index errors ────
+async function fetchAllPosts(): Promise<Post[]> {
+  const snap = await getDocs(collection(db, "posts"));
+  const posts = snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      ...data,
+      id: d.id,
+      createdAt: toDateSafe(data.createdAt),
+      updatedAt: toDateSafe(data.updatedAt),
+    } as Post;
+  });
+  // Sort newest-first client-side
+  return posts.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 // ─── CSV Export Utility ───────────────────────────────────────────────────────
@@ -68,7 +156,6 @@ function exportCSV(filename: string, headers: string[], rows: (string | number)[
   URL.revokeObjectURL(url);
 }
 
-/** Returns { year, month } for the last N months (most-recent first). */
 function getMonthOptions(count = 12) {
   const now = new Date();
   const opts: { label: string; year: number; month: number }[] = [];
@@ -77,13 +164,13 @@ function getMonthOptions(count = 12) {
     opts.push({
       label: d.toLocaleString("default", { month: "long", year: "numeric" }),
       year: d.getFullYear(),
-      month: d.getMonth(), // 0-indexed
+      month: d.getMonth(),
     });
   }
   return opts;
 }
 
-// ─── Month-picker + Export button (shared UI) ─────────────────────────────────
+// ─── Month-picker + Export button ─────────────────────────────────────────────
 
 const MonthExportButton = ({
   onExport,
@@ -96,7 +183,6 @@ const MonthExportButton = ({
   const ref = React.useRef<HTMLDivElement>(null);
   const options = useMemo(() => getMonthOptions(12), []);
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -223,8 +309,6 @@ const PostsOverTimeChart = ({ posts }: { posts: Post[] }) => {
             <feMerge><feMergeNode in="coloredBlur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
         </defs>
-
-        {/* Grid lines */}
         {[0.25, 0.5, 0.75, 1].map((f) => {
           const gy = h - f * (h - 16);
           return (
@@ -236,30 +320,17 @@ const PostsOverTimeChart = ({ posts }: { posts: Post[] }) => {
             </g>
           );
         })}
-
-        {/* Hover vertical line */}
         {hovered !== null && (
           <line x1={xs[hovered]} y1={8} x2={xs[hovered]} y2={h} stroke="#0072D1"
             strokeWidth="1" strokeDasharray="3 3" opacity="0.35" />
         )}
-
-        {/* Area */}
         <path d={area} fill="url(#areaGradLive)" />
-
-        {/* Orange accent line (FF5A00 for the active segment) */}
         {hovered !== null && hovered > 0 && (
-          <line
-            x1={xs[hovered - 1]} y1={ys[hovered - 1]}
-            x2={xs[hovered]} y2={ys[hovered]}
-            stroke="#FF5A00" strokeWidth="3" strokeLinecap="round"
-          />
+          <line x1={xs[hovered - 1]} y1={ys[hovered - 1]} x2={xs[hovered]} y2={ys[hovered]}
+            stroke="#FF5A00" strokeWidth="3" strokeLinecap="round" />
         )}
-
-        {/* Main line */}
         <path d={line} fill="none" stroke="#0072D1" strokeWidth="2.5"
           strokeLinecap="round" strokeLinejoin="round" />
-
-        {/* Data points */}
         {xs.map((x, i) => (
           <g key={i}>
             <circle cx={x} cy={ys[i]} r={hovered === i ? 8 : 4.5}
@@ -271,20 +342,15 @@ const PostsOverTimeChart = ({ posts }: { posts: Post[] }) => {
             />
           </g>
         ))}
-
-        {/* X axis labels */}
         {monthlyData.map((m, i) => (
           <text key={i} x={xs[i]} y={h + padBottom - 6} fontSize="10"
             fill={hovered === i ? "#FF5A00" : "#9CA3AF"}
             textAnchor="middle" fontWeight={hovered === i ? "800" : "500"}
-            style={{ transition: "fill 0.15s" }}
-          >
+            style={{ transition: "fill 0.15s" }}>
             {m.label}
           </text>
         ))}
       </svg>
-
-      {/* Tooltip */}
       {tooltip && (
         <div
           className="absolute z-10 pointer-events-none bg-gray-900 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-xl"
@@ -343,7 +409,6 @@ const PostStatusDonut = ({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-center">
         <svg width="160" height="160" viewBox="0 0 160 160" className="overflow-visible">
-          {/* Track */}
           <circle cx={cx} cy={cy} r={r} fill="none" stroke="#F1F5F9" strokeWidth={stroke} />
           {arcs.map((arc, i) => (
             <circle
@@ -354,16 +419,11 @@ const PostStatusDonut = ({
               strokeDashoffset={-arc.offset}
               transform={`rotate(-90 ${cx} ${cy})`}
               strokeLinecap="butt"
-              style={{
-                transition: "stroke-width 0.2s, opacity 0.2s",
-                cursor: "pointer",
-                opacity: hovered !== null && hovered !== i ? 0.35 : 1,
-              }}
+              style={{ transition: "stroke-width 0.2s, opacity 0.2s", cursor: "pointer", opacity: hovered !== null && hovered !== i ? 0.35 : 1 }}
               onMouseEnter={() => setHovered(i)}
               onMouseLeave={() => setHovered(null)}
             />
           ))}
-          {/* Center text */}
           <text x={cx} y={cy - 9} textAnchor="middle" fontSize="24" fontWeight="900"
             fill={hoveredArc ? hoveredArc.color : "#111827"}
             style={{ transition: "fill 0.2s" }}>
@@ -380,17 +440,12 @@ const PostStatusDonut = ({
           )}
         </svg>
       </div>
-
-      {/* Legend */}
       <div className="flex flex-col gap-1.5">
         {arcs.map((arc, i) => (
           <div
             key={arc.label}
             className="flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-all duration-200"
-            style={{
-              background: hovered === i ? arc.hbg : "transparent",
-              border: `1.5px solid ${hovered === i ? arc.color + "35" : "transparent"}`,
-            }}
+            style={{ background: hovered === i ? arc.hbg : "transparent", border: `1.5px solid ${hovered === i ? arc.color + "35" : "transparent"}` }}
             onMouseEnter={() => setHovered(i)}
             onMouseLeave={() => setHovered(null)}
           >
@@ -399,12 +454,8 @@ const PostStatusDonut = ({
               <span className="text-xs font-semibold text-gray-600">{arc.label}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-black" style={{ color: hovered === i ? arc.color : "#111827" }}>
-                {arc.value}
-              </span>
-              <span className="text-[10px] text-gray-400 font-medium w-8 text-right">
-                {(arc.pct * 100).toFixed(0)}%
-              </span>
+              <span className="text-xs font-black" style={{ color: hovered === i ? arc.color : "#111827" }}>{arc.value}</span>
+              <span className="text-[10px] text-gray-400 font-medium w-8 text-right">{(arc.pct * 100).toFixed(0)}%</span>
             </div>
           </div>
         ))}
@@ -425,13 +476,11 @@ const TopCategoriesChart = ({ posts }: { posts: Post[] }) => {
   }, [posts]);
 
   if (categoryCounts.length === 0) return (
-    <div className="flex items-center justify-center h-32 text-xs text-gray-400 font-medium">
-      No category data yet
-    </div>
+    <div className="flex items-center justify-center h-32 text-xs text-gray-400 font-medium">No category data yet</div>
   );
 
   const maxVal = categoryCounts[0][1];
-  const colors   = ["#0072D1", "#FF5A00", "#10B981", "#8B5CF6", "#F59E0B", "#EF4444"];
+  const colors = ["#0072D1", "#FF5A00", "#10B981", "#8B5CF6", "#F59E0B", "#EF4444"];
   const lightBgs = ["#EFF6FF", "#FFF7ED", "#ECFDF5", "#F5F3FF", "#FFFBEB", "#FEF2F2"];
 
   return (
@@ -450,24 +499,13 @@ const TopCategoriesChart = ({ posts }: { posts: Post[] }) => {
             title={cat}
           >
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-semibold transition-colors duration-200"
-                style={{ color: isHov ? colors[i % colors.length] : "#4B5563" }}>
-                {short}
-              </span>
-              <span className="text-xs font-black transition-colors duration-200"
-                style={{ color: isHov ? colors[i % colors.length] : "#111827" }}>
-                {count}
-              </span>
+              <span className="text-xs font-semibold transition-colors duration-200" style={{ color: isHov ? colors[i % colors.length] : "#4B5563" }}>{short}</span>
+              <span className="text-xs font-black transition-colors duration-200" style={{ color: isHov ? colors[i % colors.length] : "#111827" }}>{count}</span>
             </div>
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-500 ease-out"
-                style={{
-                  width: `${pct}%`,
-                  background: colors[i % colors.length],
-                  opacity: isHov ? 1 : 0.65,
-                  boxShadow: isHov ? `0 0 10px ${colors[i % colors.length]}55` : "none",
-                }}
+                style={{ width: `${pct}%`, background: colors[i % colors.length], opacity: isHov ? 1 : 0.65, boxShadow: isHov ? `0 0 10px ${colors[i % colors.length]}55` : "none" }}
               />
             </div>
           </div>
@@ -491,16 +529,10 @@ const UserRoleSplitBar = ({ providers, seekers }: { providers: number; seekers: 
   return (
     <div className="space-y-3">
       <div className="w-full h-6 rounded-full overflow-hidden bg-gray-100 flex">
-        <div
-          className="h-full bg-[#0072D1] flex items-center justify-center transition-all duration-700 ease-out"
-          style={{ width: animated ? `${provPct}%` : "0%" }}
-        >
+        <div className="h-full bg-[#0072D1] flex items-center justify-center transition-all duration-700 ease-out" style={{ width: animated ? `${provPct}%` : "0%" }}>
           {provPct > 14 && <span className="text-[9px] text-white font-black">{provPct.toFixed(0)}%</span>}
         </div>
-        <div
-          className="h-full bg-[#FF5A00] flex items-center justify-center transition-all duration-700 ease-out"
-          style={{ width: animated ? `${seekPct}%` : "0%" }}
-        >
+        <div className="h-full bg-[#FF5A00] flex items-center justify-center transition-all duration-700 ease-out" style={{ width: animated ? `${seekPct}%` : "0%" }}>
           {seekPct > 14 && <span className="text-[9px] text-white font-black">{seekPct.toFixed(0)}%</span>}
         </div>
       </div>
@@ -525,33 +557,20 @@ const UserRoleSplitBar = ({ providers, seekers }: { providers: number; seekers: 
 
 // ─── Animated Stat Card ───────────────────────────────────────────────────────
 
-const StatCard = ({
-  label, rawValue, value, change, positive, icon: Icon, iconBg, accentColor
-}: any) => {
+const StatCard = ({ label, rawValue, value, change, positive, icon: Icon, iconBg, accentColor }: any) => {
   const [hov, setHov] = useState(false);
   const animated = useCountUp(typeof rawValue === "number" ? rawValue : 0);
 
   return (
     <div
       className="relative bg-white rounded-2xl border border-gray-100 p-4 md:p-5 shadow-sm cursor-default overflow-hidden group"
-      style={{
-        boxShadow: hov ? `0 8px 32px ${accentColor}20` : undefined,
-        transform: hov ? "translateY(-3px)" : "translateY(0)",
-        transition: "transform 0.25s, box-shadow 0.25s",
-      }}
+      style={{ boxShadow: hov ? `0 8px 32px ${accentColor}20` : undefined, transform: hov ? "translateY(-3px)" : "translateY(0)", transition: "transform 0.25s, box-shadow 0.25s" }}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
     >
-      {/* Top accent bar */}
-      <div
-        className="absolute top-0 left-0 h-[3px] rounded-t-2xl transition-all duration-500"
-        style={{ width: hov ? "100%" : "0%", background: accentColor }}
-      />
+      <div className="absolute top-0 left-0 h-[3px] rounded-t-2xl transition-all duration-500" style={{ width: hov ? "100%" : "0%", background: accentColor }} />
       <div className="flex items-start justify-between mb-3">
-        <div
-          className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center`}
-          style={{ transform: hov ? "scale(1.1) rotate(-4deg)" : "scale(1)", transition: "transform 0.25s" }}
-        >
+        <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center`} style={{ transform: hov ? "scale(1.1) rotate(-4deg)" : "scale(1)", transition: "transform 0.25s" }}>
           <Icon className="w-5 h-5" />
         </div>
         {change && (
@@ -573,12 +592,12 @@ const StatCard = ({
 
 const Badge = ({ status }: { status: string }) => {
   const map: Record<string, string> = {
-    PENDING:     "bg-orange-50 text-orange-500 border border-orange-200",
-    APPROVED:    "bg-blue-50 text-blue-600 border border-blue-200",
-    ACTIVE:      "bg-green-50 text-green-600 border border-green-200",
-    VERIFIED:    "bg-teal-50 text-teal-600 border border-teal-200",
+    PENDING:       "bg-orange-50 text-orange-500 border border-orange-200",
+    APPROVED:      "bg-blue-50 text-blue-600 border border-blue-200",
+    ACTIVE:        "bg-green-50 text-green-600 border border-green-200",
+    VERIFIED:      "bg-teal-50 text-teal-600 border border-teal-200",
     "IN PROGRESS": "bg-gray-100 text-gray-600 border border-gray-200",
-    REJECTED:    "bg-red-50 text-red-500 border border-red-200",
+    REJECTED:      "bg-red-50 text-red-500 border border-red-200",
   };
   return (
     <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full whitespace-nowrap ${map[status] || "bg-gray-100 text-gray-500"}`}>
@@ -586,8 +605,6 @@ const Badge = ({ status }: { status: string }) => {
     </span>
   );
 };
-
-// ─── Mini hover stat box ──────────────────────────────────────────────────────
 
 const MiniStat = ({ label, value, color, bg }: { label: string; value: number; color: string; bg: string }) => {
   const [hov, setHov] = useState(false);
@@ -609,83 +626,60 @@ const MiniStat = ({ label, value, color, bg }: { label: string; value: number; c
 const Overview = ({
   totalUsers, totalProviders, totalSeekers,
   pendingPosts, approvedPosts, rejectedPosts,
-  loading, posts, users,
+  loading, posts, users, onRefresh,
 }: {
   totalUsers: number; totalProviders: number; totalSeekers: number;
   pendingPosts: number; approvedPosts: number; rejectedPosts: number;
-  loading: boolean; posts: Post[]; users: any[];
+  loading: boolean; posts: Post[]; users: UserProfile[]; onRefresh: () => void;
 }) => {
   const [refreshing, setRefreshing] = useState(false);
-  const doRefresh = () => { setRefreshing(true); setTimeout(() => setRefreshing(false), 1100); };
+  const doRefresh = () => {
+    setRefreshing(true);
+    onRefresh();
+    setTimeout(() => setRefreshing(false), 1100);
+  };
 
   const handleOverviewExport = (year: number, month: number, monthLabel: string) => {
-    // ── Posts for selected month ──────────────────────────────────────────────
     const monthPosts = posts.filter((p) => {
       const d = toDateSafe(p.createdAt);
       return d.getFullYear() === year && d.getMonth() === month;
     });
-
-    // ── Users joined in selected month ────────────────────────────────────────
     const monthUsers = users.filter((u) => {
-      if (!u.createdAt) return false;
       const d = toDateSafe(u.createdAt);
       return d.getFullYear() === year && d.getMonth() === month;
     });
-
-    // ── Summary sheet ─────────────────────────────────────────────────────────
-    const summaryHeaders = ["Metric", "Value"];
-    const summaryRows: [string | number][][] = [
-      [["Month"], [monthLabel]],
-      [["Total Posts This Month"], [monthPosts.length]],
-      [["Approved Posts"], [monthPosts.filter((p) => p.status === "approved").length]],
-      [["Pending Posts"], [monthPosts.filter((p) => p.status === "pending").length]],
-      [["Rejected Posts"], [monthPosts.filter((p) => p.status === "rejected").length]],
-      [["New Users This Month"], [monthUsers.length]],
-      [["New Service Providers"], [monthUsers.filter((u) => u.role === "service_provider").length]],
-      [["New Customers"], [monthUsers.filter((u) => u.role === "seeker").length]],
-    ];
     exportCSV(
       `overview-summary-${year}-${String(month + 1).padStart(2, "0")}.csv`,
-      summaryHeaders,
-      summaryRows
+      ["Metric", "Value"],
+      [
+        [["Month"], [monthLabel]],
+        [["Total Posts This Month"], [monthPosts.length]],
+        [["Approved Posts"], [monthPosts.filter((p) => p.status === "approved").length]],
+        [["Pending Posts"], [monthPosts.filter((p) => p.status === "pending").length]],
+        [["Rejected Posts"], [monthPosts.filter((p) => p.status === "rejected").length]],
+        [["New Users This Month"], [monthUsers.length]],
+        [["New Service Providers"], [monthUsers.filter((u) => u.role === "service_provider").length]],
+        [["New Customers"], [monthUsers.filter((u) => u.role === "seeker").length]],
+      ]
     );
-
-    // ── Posts detail sheet ────────────────────────────────────────────────────
     if (monthPosts.length > 0) {
       exportCSV(
         `overview-posts-${year}-${String(month + 1).padStart(2, "0")}.csv`,
         ["Post ID", "Title", "Category", "Owner", "Location", "Status", "Submitted"],
-        monthPosts.map((p) => [
-          [p.id],
-          [p.title || ""],
-          [p.category || ""],
-          [p.ownerName || ""],
-          [p.location || ""],
-          [p.status || ""],
-          [toDateSafe(p.createdAt).toLocaleDateString()],
-        ])
+        monthPosts.map((p) => [[p.id], [p.title || ""], [p.category || ""], [p.ownerName || ""], [p.location || ""], [p.status || ""], [toDateSafe(p.createdAt).toLocaleDateString()]])
       );
     }
-
-    // ── Users detail sheet ────────────────────────────────────────────────────
     if (monthUsers.length > 0) {
       exportCSV(
         `overview-users-${year}-${String(month + 1).padStart(2, "0")}.csv`,
         ["User ID", "Name", "Email", "Role", "Joined"],
-        monthUsers.map((u) => [
-          [u.uid || ""],
-          [u.displayName || ""],
-          [u.email || ""],
-          [u.role || ""],
-          [u.createdAt ? toDateSafe(u.createdAt).toLocaleDateString() : "N/A"],
-        ])
+        monthUsers.map((u) => [[u.uid], [u.displayName || ""], [u.email], [u.role], [toDateSafe(u.createdAt).toLocaleDateString()]])
       );
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-0.5">
@@ -710,15 +704,13 @@ const Overview = ({
         </div>
       </div>
 
-      {/* Stat cards — animated counters + hover effects */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-        <StatCard label="Total Users"       rawValue={loading ? 0 : totalUsers}    value={loading ? "..." : totalUsers.toLocaleString()}    change="+12.5%" positive icon={Users}       iconBg="bg-blue-50 text-blue-500"   accentColor="#0072D1" />
-        <StatCard label="Active Providers"  rawValue={loading ? 0 : totalProviders} value={loading ? "..." : totalProviders.toLocaleString()} change="+3.2%"  positive icon={UserCheck}   iconBg="bg-orange-50 text-orange-500" accentColor="#FF5A00" />
-        <StatCard label="Pending Requests"  rawValue={loading ? 0 : pendingPosts}   value={loading ? "..." : pendingPosts.toLocaleString()}   change="+18%"   positive={false} icon={ClipboardList} iconBg="bg-red-50 text-red-500"     accentColor="#EF4444" />
-        <StatCard label="Approved Posts"    rawValue={loading ? 0 : approvedPosts}  value={loading ? "..." : approvedPosts.toLocaleString()}  change="+24%"   positive icon={TrendingUp}  iconBg="bg-green-50 text-green-500"  accentColor="#10B981" />
+        <StatCard label="Total Users"      rawValue={loading ? 0 : totalUsers}    value={loading ? "..." : totalUsers.toLocaleString()}    change="+12.5%" positive icon={Users}       iconBg="bg-blue-50 text-blue-500"   accentColor="#0072D1" />
+        <StatCard label="Active Providers" rawValue={loading ? 0 : totalProviders} value={loading ? "..." : totalProviders.toLocaleString()} change="+3.2%"  positive icon={UserCheck}   iconBg="bg-orange-50 text-orange-500" accentColor="#FF5A00" />
+        <StatCard label="Pending Requests" rawValue={loading ? 0 : pendingPosts}   value={loading ? "..." : pendingPosts.toLocaleString()}   change="+18%"   positive={false} icon={ClipboardList} iconBg="bg-red-50 text-red-500"     accentColor="#EF4444" />
+        <StatCard label="Approved Posts"   rawValue={loading ? 0 : approvedPosts}  value={loading ? "..." : approvedPosts.toLocaleString()}  change="+24%"   positive icon={TrendingUp}  iconBg="bg-green-50 text-green-500"  accentColor="#10B981" />
       </div>
 
-      {/* ROW 1: Area chart + Donut */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 md:p-5 overflow-hidden">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5">
@@ -734,9 +726,7 @@ const Overview = ({
             </span>
           </div>
           {loading ? (
-            <div className="flex items-center justify-center h-48">
-              <Loader className="w-6 h-6 text-[#0072D1] animate-spin" />
-            </div>
+            <div className="flex items-center justify-center h-48"><Loader className="w-6 h-6 text-[#0072D1] animate-spin" /></div>
           ) : (
             <PostsOverTimeChart posts={posts} />
           )}
@@ -749,18 +739,14 @@ const Overview = ({
           </div>
           <p className="text-xs text-gray-400 font-medium mb-4 ml-6">Hover segments to inspect</p>
           {loading ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader className="w-6 h-6 text-[#0072D1] animate-spin" />
-            </div>
+            <div className="flex items-center justify-center py-10"><Loader className="w-6 h-6 text-[#0072D1] animate-spin" /></div>
           ) : (
             <PostStatusDonut pending={pendingPosts} approved={approvedPosts} rejected={rejectedPosts} />
           )}
         </div>
       </div>
 
-      {/* ROW 2: Categories + User split + Activities */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Top service categories */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 md:p-5">
           <div className="flex items-center gap-2 mb-1">
             <Zap className="w-4 h-4 text-[#0072D1]" />
@@ -768,15 +754,12 @@ const Overview = ({
           </div>
           <p className="text-xs text-gray-400 font-medium mb-4 ml-6">Hover rows to highlight</p>
           {loading ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader className="w-6 h-6 text-[#0072D1] animate-spin" />
-            </div>
+            <div className="flex items-center justify-center py-10"><Loader className="w-6 h-6 text-[#0072D1] animate-spin" /></div>
           ) : (
             <TopCategoriesChart posts={posts} />
           )}
         </div>
 
-        {/* User breakdown */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 md:p-5">
           <div className="flex items-center gap-2 mb-1">
             <Users className="w-4 h-4 text-[#FF5A00]" />
@@ -784,23 +767,20 @@ const Overview = ({
           </div>
           <p className="text-xs text-gray-400 font-medium mb-4 ml-6">Providers vs seekers on platform</p>
           {loading ? (
-            <div className="flex items-center justify-center py-6">
-              <Loader className="w-6 h-6 text-[#0072D1] animate-spin" />
-            </div>
+            <div className="flex items-center justify-center py-6"><Loader className="w-6 h-6 text-[#0072D1] animate-spin" /></div>
           ) : (
             <>
               <UserRoleSplitBar providers={totalProviders} seekers={totalSeekers} />
               <div className="grid grid-cols-2 gap-2.5 mt-4">
-                <MiniStat label="Providers"     value={totalProviders} color="#0072D1" bg="#EFF6FF" />
-                <MiniStat label="Seekers"       value={totalSeekers}   color="#FF5A00" bg="#FFF7ED" />
-                <MiniStat label="Pending Posts" value={pendingPosts}   color="#EF4444" bg="#FEF2F2" />
-                <MiniStat label="Approved Posts" value={approvedPosts} color="#10B981" bg="#ECFDF5" />
+                <MiniStat label="Providers"      value={totalProviders} color="#0072D1" bg="#EFF6FF" />
+                <MiniStat label="Seekers"        value={totalSeekers}   color="#FF5A00" bg="#FFF7ED" />
+                <MiniStat label="Pending Posts"  value={pendingPosts}   color="#EF4444" bg="#FEF2F2" />
+                <MiniStat label="Approved Posts" value={approvedPosts}  color="#10B981" bg="#ECFDF5" />
               </div>
             </>
           )}
         </div>
 
-        {/* Recent Activities */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 md:p-5 flex flex-col">
           <div className="flex items-center gap-2 mb-4">
             <Activity className="w-4 h-4 text-green-500" />
@@ -808,20 +788,14 @@ const Overview = ({
           </div>
           <div className="space-y-2 flex-1">
             {loading ? (
-              <div className="flex items-center justify-center py-10">
-                <Loader className="w-6 h-6 text-[#0072D1] animate-spin" />
-              </div>
+              <div className="flex items-center justify-center py-10"><Loader className="w-6 h-6 text-[#0072D1] animate-spin" /></div>
             ) : (
               [
-                { icon: Users,      bg: "bg-blue-100",   color: "text-blue-600",   dot: "#0072D1", text: `${totalUsers} total users registered`,         sub: "Platform total" },
-                { icon: CheckCircle,bg: "bg-green-100",  color: "text-green-600",  dot: "#10B981", text: `${approvedPosts} posts approved`,               sub: "Live on platform" },
-                { icon: AlertCircle,bg: "bg-orange-100", color: "text-orange-500", dot: "#FF5A00", text: `${pendingPosts} pending posts need review`,     sub: "Action required" },
-                { icon: UserCheck,  bg: "bg-blue-50",    color: "text-blue-400",   dot: "#60A5FA", text: `${totalProviders} active service providers`,   sub: "Registered" },
-              ].map((item, i) => {
-                return (
-                  <ActivityItem key={i} item={item} />
-                );
-              })
+                { icon: Users,       bg: "bg-blue-100",   color: "text-blue-600",   dot: "#0072D1", text: `${totalUsers} total users registered`,           sub: "Platform total" },
+                { icon: CheckCircle, bg: "bg-green-100",  color: "text-green-600",  dot: "#10B981", text: `${approvedPosts} posts approved`,                sub: "Live on platform" },
+                { icon: AlertCircle, bg: "bg-orange-100", color: "text-orange-500", dot: "#FF5A00", text: `${pendingPosts} pending posts need review`,       sub: "Action required" },
+                { icon: UserCheck,   bg: "bg-blue-50",    color: "text-blue-400",   dot: "#60A5FA", text: `${totalProviders} active service providers`,     sub: "Registered" },
+              ].map((item, i) => <ActivityItem key={i} item={item} />)
             )}
           </div>
           <button className="mt-4 w-full border border-gray-200 rounded-xl py-2.5 text-xs font-bold text-[#0072D1] hover:bg-blue-50 hover:border-[#0072D1] transition-all duration-200">
@@ -833,11 +807,10 @@ const Overview = ({
   );
 };
 
-// ─── Activity Item Component ──────────────────────────────────────────────────
+// ─── Activity Item ─────────────────────────────────────────────────────────────
 
 const ActivityItem = ({ item }: { item: { icon: any; bg: string; color: string; dot: string; text: string; sub: string } }) => {
   const [hov, setHov] = useState(false);
-  
   return (
     <div
       className="flex items-start gap-3 p-2.5 rounded-xl transition-all duration-200 cursor-default"
@@ -859,12 +832,12 @@ const ActivityItem = ({ item }: { item: { icon: any; bg: string; color: string; 
 // ─── Users Table ──────────────────────────────────────────────────────────────
 
 const UsersSection = ({
-  title, subtitle, roleFilter, statsCards, users, loading
+  title, subtitle, roleFilter, statsCards, users, loading,
 }: {
   title: string; subtitle: string;
-  roleFilter: "service_provider" | "seeker";
+  roleFilter: string;
   statsCards: { label: string; value: string; sub: string; subColor: string }[];
-  users: any[]; loading: boolean;
+  users: UserProfile[]; loading: boolean;
 }) => {
   const [search, setSearch] = useState("");
   const filteredUsers = users
@@ -877,12 +850,9 @@ const UsersSection = ({
   const handleExport = (year: number, month: number, monthLabel: string) => {
     const roleUsers = users.filter((u) => u.role === roleFilter);
     const monthUsers = roleUsers.filter((u) => {
-      if (!u.createdAt) return false;
       const d = toDateSafe(u.createdAt);
       return d.getFullYear() === year && d.getMonth() === month;
     });
-
-    // Summary CSV
     exportCSV(
       `${sectionLabel}-summary-${year}-${String(month + 1).padStart(2, "0")}.csv`,
       ["Metric", "Value"],
@@ -892,19 +862,11 @@ const UsersSection = ({
         [["Total " + sectionName + "s (All Time)"], [roleUsers.length]],
       ]
     );
-
-    // Detail CSV
     if (monthUsers.length > 0) {
       exportCSV(
         `${sectionLabel}-detail-${year}-${String(month + 1).padStart(2, "0")}.csv`,
         ["User ID", "Name", "Email", "Role", "Joined"],
-        monthUsers.map((u) => [
-          [u.uid || ""],
-          [u.displayName || ""],
-          [u.email || ""],
-          [u.role || ""],
-          [u.createdAt ? toDateSafe(u.createdAt).toLocaleDateString() : "N/A"],
-        ])
+        monthUsers.map((u) => [[u.uid], [u.displayName || ""], [u.email], [u.role], [toDateSafe(u.createdAt).toLocaleDateString()]])
       );
     }
   };
@@ -916,10 +878,7 @@ const UsersSection = ({
           <h1 className="text-xl md:text-2xl font-black text-gray-900">{title}</h1>
           <p className="text-sm text-gray-400 font-medium mt-0.5">{subtitle}</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-          <MonthExportButton onExport={handleExport} label="Export" />
-          
-        </div>
+        <MonthExportButton onExport={handleExport} label="Export" />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -943,13 +902,6 @@ const UsersSection = ({
             />
             <p className="text-xs font-bold text-gray-400 hidden sm:block">{filteredUsers.length} found</p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {["Status: All", "Verification: Any"].map((f) => (
-              <button key={f} className="flex flex-1 sm:flex-none items-center justify-center gap-1 px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-500 hover:border-[#0072D1] bg-white transition-colors whitespace-nowrap">
-                {f} <ChevronDown className="w-3 h-3" />
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="hidden md:block overflow-x-auto">
@@ -972,7 +924,7 @@ const UsersSection = ({
                     const initials = u.displayName
                       ? u.displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase()
                       : u.email.substring(0, 2).toUpperCase();
-                    const joinDate = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "N/A";
+                    const joinDate = toDateSafe(u.createdAt).toLocaleDateString();
                     return (
                       <tr key={u.uid} className={`border-b border-gray-50 hover:bg-blue-50/30 transition-colors group ${i === filteredUsers.length - 1 ? "border-0" : ""}`}>
                         <td className="px-5 py-4">
@@ -1015,7 +967,7 @@ const UsersSection = ({
           ) : (
             filteredUsers.map((u) => {
               const initials = u.displayName ? u.displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase() : u.email.substring(0, 2).toUpperCase();
-              const joinDate = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "N/A";
+              const joinDate = toDateSafe(u.createdAt).toLocaleDateString();
               return (
                 <div key={u.uid} className="p-4 flex flex-col gap-3 hover:bg-gray-50 transition-colors">
                   <div className="flex items-center justify-between">
@@ -1042,7 +994,7 @@ const UsersSection = ({
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-t border-gray-100">
-          <p className="text-xs text-gray-400 font-medium text-center sm:text-left">Showing 1 to {filteredUsers.length} of {filteredUsers.length}</p>
+          <p className="text-xs text-gray-400 font-medium text-center sm:text-left">Showing {filteredUsers.length} of {filteredUsers.length}</p>
           <div className="flex items-center justify-center gap-1">
             <button className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:border-[#0072D1] hover:text-[#0072D1] transition-colors"><ChevronLeft className="w-3.5 h-3.5" /></button>
             <button className="w-7 h-7 rounded-lg text-xs font-bold bg-[#0072D1] text-white">1</button>
@@ -1057,7 +1009,7 @@ const UsersSection = ({
 // ─── Post Detail Modal ────────────────────────────────────────────────────────
 
 const PostDetailModal = ({
-  postId, postData, postStatus, onClose, onApprove, onDecline, viewOnly = false
+  postId, postData, postStatus, onClose, onApprove, onDecline, viewOnly = false,
 }: {
   postId: string; postData?: Post; postStatus: string;
   onClose: () => void; onApprove: () => void; onDecline: () => void; viewOnly?: boolean;
@@ -1084,7 +1036,7 @@ const PostDetailModal = ({
     { label: "Specific Cities",                          value: p.specificCities || "N/A" },
     { label: "Maximum Travel Distance",                  value: p.travelDistance || "N/A" },
     { label: "Available Days",                           value: p.availableDays?.join(", ") || "N/A" },
-    { label: "Available Hours",                          value: `${p.timeFromHour}:00 ${p.timeFromAmPm} – ${p.timeToHour}:00 ${p.timeToAmPm}` || "N/A" },
+    { label: "Available Hours",                          value: `${p.timeFromHour}:00 ${p.timeFromAmPm} – ${p.timeToHour}:00 ${p.timeToAmPm}` },
     { label: "Emergency Availability",                   value: p.emergency || "N/A" },
   ];
 
@@ -1146,16 +1098,14 @@ const PostDetailModal = ({
 
         <div className="flex-shrink-0 flex items-center justify-end gap-3 px-4 sm:px-5 md:px-7 py-4 border-t border-gray-100 bg-white">
           {viewOnly ? (
-            <button onClick={onClose} className="relative overflow-hidden w-full sm:w-auto px-8 py-2.5 rounded-full border-2 border-gray-300 text-gray-600 font-bold text-sm hover:border-[#0072D1] hover:text-[#0072D1] transition-all duration-200">Close</button>
+            <button onClick={onClose} className="w-full sm:w-auto px-8 py-2.5 rounded-full border-2 border-gray-300 text-gray-600 font-bold text-sm hover:border-[#0072D1] hover:text-[#0072D1] transition-all duration-200">Close</button>
           ) : actionDone === null ? (
             <>
               <button onClick={() => { setActionDone("declined"); onDecline(); }} className="relative overflow-hidden flex-1 sm:flex-none sm:w-36 bg-red-500 text-white font-bold py-3 rounded-full transition-all duration-300 hover:bg-black hover:scale-[1.02] group shadow-md">
                 <span className="relative z-10">Decline</span>
-                <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700 rounded-full" />
               </button>
               <button onClick={() => { setActionDone("approved"); onApprove(); }} className="relative overflow-hidden flex-1 sm:flex-none sm:w-36 bg-[#0072D1] text-white font-bold py-3 rounded-full transition-all duration-300 hover:bg-black hover:scale-[1.02] group shadow-md">
                 <span className="relative z-10">Approve</span>
-                <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700 rounded-full" />
               </button>
             </>
           ) : (
@@ -1178,14 +1128,14 @@ const PostDetailModal = ({
 // ─── Posts Table ──────────────────────────────────────────────────────────────
 
 const PostsTable = ({
-  posts, onRowClick, clickableRows = false
+  posts, onRowClick, clickableRows = false,
 }: { posts: Post[]; onRowClick?: (id: string) => void; clickableRows?: boolean }) => (
   <>
     <div className="hidden md:block overflow-x-auto">
       <table className="w-full whitespace-nowrap">
         <thead>
           <tr className="border-b border-gray-100 bg-gray-50/50">
-            {["REQUEST ID", "CUSTOMER", "SERVICE TYPE", "DATE", "STATUS", "ACTIONS"].map((h) => (
+            {["REQUEST ID", "SERVICE PROVIDER", "SERVICE TYPE", "DATE", "STATUS", "ACTIONS"].map((h) => (
               <th key={h} className="text-left text-[10px] font-black text-gray-400 tracking-widest uppercase px-5 py-3">{h}</th>
             ))}
           </tr>
@@ -1211,7 +1161,7 @@ const PostsTable = ({
                   <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />{p.category}
                 </span>
               </td>
-              <td className="px-5 py-4 text-sm text-gray-500 font-medium">{new Date(p.createdAt).toLocaleDateString()}</td>
+              <td className="px-5 py-4 text-sm text-gray-500 font-medium">{toDateSafe(p.createdAt).toLocaleDateString()}</td>
               <td className="px-5 py-4"><Badge status={p.status.toUpperCase()} /></td>
               <td className="px-5 py-4" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                 <div className="flex items-center gap-1.5">
@@ -1241,7 +1191,7 @@ const PostsTable = ({
             <span className="text-sm font-bold text-gray-900">{p.ownerName || "Service Provider"}</span>
           </div>
           <div className="flex items-center justify-between mt-2 gap-2">
-            <span className="text-xs text-gray-400">{p.category} · {new Date(p.createdAt).toLocaleDateString()}</span>
+            <span className="text-xs text-gray-400">{p.category} · {toDateSafe(p.createdAt).toLocaleDateString()}</span>
             <div className="flex gap-2" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
               {p.status === "pending" && <button className="h-8 rounded-lg text-[#0072D1] bg-blue-50/50 border border-[#0072D1]/20 flex items-center justify-center px-3"><CheckCircle className="w-4 h-4" /></button>}
               <button className="h-8 rounded-lg text-gray-500 border border-gray-200 flex items-center justify-center px-3"><Pencil className="w-4 h-4" /></button>
@@ -1267,23 +1217,26 @@ const PostManagement = ({ posts }: { posts: Post[] }) => {
   const activeProviderCount = new Set(posts.filter((p) => p.status === "approved").map((p) => p.serviceProviderId)).size;
 
   const tabs = [
-    { key: "all" as const, label: "All Requests", count: totalPosts },
-    { key: "pending" as const, label: "Pending", count: pendingCount },
-    { key: "approved" as const, label: "Approved", count: approvedCount },
-    { key: "in_progress" as const, label: "In Progress", count: posts.filter((p) => p.status === "rejected").length },
+    { key: "all" as const,         label: "All Requests", count: totalPosts },
+    { key: "pending" as const,     label: "Pending",      count: pendingCount },
+    { key: "approved" as const,    label: "Approved",     count: approvedCount },
+    { key: "in_progress" as const, label: "In Progress",  count: posts.filter((p) => p.status === "rejected").length },
   ];
 
-  const visiblePosts = tab === "all" ? posts : tab === "pending" ? posts.filter((p) => p.status === "pending") : tab === "approved" ? posts.filter((p) => p.status === "approved") : posts.filter((p) => p.status === "rejected");
+  const visiblePosts =
+    tab === "all"         ? posts :
+    tab === "pending"     ? posts.filter((p) => p.status === "pending") :
+    tab === "approved"    ? posts.filter((p) => p.status === "approved") :
+                            posts.filter((p) => p.status === "rejected");
+
   const selectedPost = posts.find((p) => p.id === selectedId);
 
   return (
     <>
       <div className="space-y-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl md:text-2xl font-black text-gray-900">Post Management</h1>
-            <p className="text-sm text-gray-400 font-medium mt-0.5">Overview and control of active service requests across the platform.</p>
-          </div>
+        <div>
+          <h1 className="text-xl md:text-2xl font-black text-gray-900">Post Management</h1>
+          <p className="text-sm text-gray-400 font-medium mt-0.5">Overview and control of active service requests across the platform.</p>
         </div>
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex gap-0 border-b border-gray-100 overflow-x-auto px-2 scrollbar-hide">
@@ -1300,10 +1253,10 @@ const PostManagement = ({ posts }: { posts: Post[] }) => {
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-0 border-b border-gray-100">
             {[
-              { label: "TOTAL POSTS", value: totalPosts.toLocaleString(), labelColor: "text-gray-500", borderRight: true },
-              { label: "PENDING", value: pendingCount.toLocaleString(), labelColor: "text-orange-500", borderRight: true },
-              { label: "APPROVED", value: approvedCount.toLocaleString(), labelColor: "text-blue-600", borderRight: true },
-              { label: "ACTIVE PROS", value: activeProviderCount.toLocaleString(), labelColor: "text-green-600", accentLeft: true },
+              { label: "TOTAL POSTS",  value: totalPosts.toLocaleString(),          labelColor: "text-gray-500",  borderRight: true },
+              { label: "PENDING",      value: pendingCount.toLocaleString(),         labelColor: "text-orange-500", borderRight: true },
+              { label: "APPROVED",     value: approvedCount.toLocaleString(),        labelColor: "text-blue-600",  borderRight: true },
+              { label: "ACTIVE PROS",  value: activeProviderCount.toLocaleString(),  labelColor: "text-green-600", accentLeft: true },
             ].map((s, i) => (
               <div key={i} className={`p-4 md:p-5 hover:bg-gray-50/70 transition-colors cursor-default ${s.borderRight ? "md:border-r border-gray-100" : ""} ${s.accentLeft ? "lg:border-l-4 lg:border-l-green-500" : ""} ${i % 2 === 0 ? "border-r border-gray-100 lg:border-r-0" : ""} ${i < 2 ? "border-b border-gray-100 lg:border-b-0" : ""}`}>
                 <p className={`text-[10px] font-black uppercase tracking-widest mb-1.5 ${s.labelColor}`}>{s.label}</p>
@@ -1311,7 +1264,11 @@ const PostManagement = ({ posts }: { posts: Post[] }) => {
               </div>
             ))}
           </div>
-          <PostsTable posts={visiblePosts} onRowClick={(id) => setSelectedId(id)} clickableRows />
+          {visiblePosts.length === 0 ? (
+            <div className="py-16 text-center"><p className="text-sm text-gray-400 font-medium">No posts found.</p></div>
+          ) : (
+            <PostsTable posts={visiblePosts} onRowClick={(id) => setSelectedId(id)} clickableRows />
+          )}
         </div>
       </div>
       {selectedId && selectedPost && (
@@ -1323,7 +1280,7 @@ const PostManagement = ({ posts }: { posts: Post[] }) => {
 
 // ─── Approval Section ─────────────────────────────────────────────────────────
 
-const Approval = ({ posts }: { posts: Post[] }) => {
+const Approval = ({ posts, onPostsChange }: { posts: Post[]; onPostsChange: () => void }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -1337,9 +1294,14 @@ const Approval = ({ posts }: { posts: Post[] }) => {
     if (!selectedId) return;
     try {
       setActionLoading(true);
-      await postService.approvePost(selectedId);
+      await updateDoc(doc(db, "posts", selectedId), {
+        status: "approved",
+        rejectionReason: "",
+        updatedAt: serverTimestamp(),
+      });
       alert("Post approved successfully!");
       setSelectedId(null);
+      onPostsChange();
     } catch { alert("Failed to approve post"); }
     finally { setActionLoading(false); }
   };
@@ -1348,9 +1310,14 @@ const Approval = ({ posts }: { posts: Post[] }) => {
     if (!pendingRejectId || !rejectionReason.trim()) { alert("Please provide a rejection reason"); return; }
     try {
       setActionLoading(true);
-      await postService.rejectPost(pendingRejectId, rejectionReason);
+      await updateDoc(doc(db, "posts", pendingRejectId), {
+        status: "rejected",
+        rejectionReason,
+        updatedAt: serverTimestamp(),
+      });
       alert("Post rejected successfully!");
       setShowRejectModal(false); setRejectionReason(""); setPendingRejectId(null); setSelectedId(null);
+      onPostsChange();
     } catch { alert("Failed to reject post"); }
     finally { setActionLoading(false); }
   };
@@ -1400,89 +1367,113 @@ const Approval = ({ posts }: { posts: Post[] }) => {
 const AdminDashboard: React.FC = () => {
   const [section, setSection] = useState<Section>("overview");
   const [sidebarOpen, setSidebar] = useState(false);
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [allUsersResult, allPostsResult] = await Promise.all([
-          userService.getUsersByRole("service_provider"),
-          postService.getAllPosts(),
-        ]);
-        const seekers = await userService.getUsersByRole("seeker");
-        setUsers([...allUsersResult, ...seekers]);
-        setPosts(allPostsResult);
-      } catch (err) {
-        console.error("Error fetching dashboard data:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-  const totalUsers      = users.length;
-  const totalProviders  = users.filter((u) => u.role === "service_provider").length;
-  const totalSeekers    = users.filter((u) => u.role === "seeker").length;
-  const pendingPosts    = posts.filter((p) => p.status === "pending").length;
-  const approvedPosts   = posts.filter((p) => p.status === "approved").length;
-  const rejectedPosts   = posts.filter((p) => p.status === "rejected").length;
+      // Fetch in parallel — both use simple getDocs with no composite index
+      const [fetchedUsers, fetchedPosts] = await Promise.all([
+        fetchAllUsers(),
+        fetchAllPosts(),
+      ]);
+
+      setUsers(fetchedUsers);
+      setPosts(fetchedPosts);
+    } catch (err: any) {
+      console.error("Dashboard fetch error:", err);
+      setError(err?.message || "Failed to load dashboard data. Check Firestore rules.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  const totalUsers     = users.length;
+  const totalProviders = users.filter((u) => u.role === "service_provider").length;
+  const totalSeekers   = users.filter((u) => u.role === "seeker").length;
+  const pendingPosts   = posts.filter((p) => p.status === "pending").length;
+  const approvedPosts  = posts.filter((p) => p.status === "approved").length;
+  const rejectedPosts  = posts.filter((p) => p.status === "rejected").length;
 
   const navItems: { key: Section; label: string; icon: any; badge?: number }[] = [
-    { key: "overview",  label: "Overview",          icon: LayoutDashboard },
-    { key: "providers", label: "Service Providers",  icon: UserCheck },
-    { key: "customers", label: "Customers",          icon: Users },
-    { key: "posts",     label: "Post Management",    icon: ClipboardList },
-    { key: "approval",  label: "Approval",           icon: CheckSquare, badge: pendingPosts },
+    { key: "overview",  label: "Overview",         icon: LayoutDashboard },
+    { key: "providers", label: "Service Providers", icon: UserCheck },
+    { key: "customers", label: "Customers",         icon: Users },
+    { key: "posts",     label: "Post Management",   icon: ClipboardList },
+    { key: "approval",  label: "Approval",          icon: CheckSquare, badge: pendingPosts },
   ];
 
   const renderContent = () => {
+    if (error) {
+      return (
+        <div className="flex flex-col items-center justify-center h-64 gap-4">
+          <AlertCircle className="w-10 h-10 text-red-400" />
+          <p className="text-sm font-bold text-red-500 text-center max-w-md">{error}</p>
+          <button onClick={loadData} className="px-4 py-2 bg-[#0072D1] text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors">
+            Retry
+          </button>
+        </div>
+      );
+    }
+
     switch (section) {
       case "overview":
         return (
           <Overview
             totalUsers={totalUsers} totalProviders={totalProviders} totalSeekers={totalSeekers}
             pendingPosts={pendingPosts} approvedPosts={approvedPosts} rejectedPosts={rejectedPosts}
-            loading={loading} posts={posts} users={users}
+            loading={loading} posts={posts} users={users} onRefresh={loadData}
           />
         );
       case "providers":
         return (
-          <UsersSection title="Service Provider Management" subtitle="Audit and verify service providers on the platform."
-            roleFilter="service_provider" users={users} loading={loading}
+          <UsersSection
+            title="Service Provider Management"
+            subtitle="Audit and verify service providers on the platform."
+            roleFilter="service_provider"
+            users={users} loading={loading}
             statsCards={[
-              { label: "Pending Verifications", value: pendingPosts.toString(), sub: "Requiring action", subColor: "text-orange-500" },
-              { label: "Active Providers", value: totalProviders.toString(), sub: `+${Math.floor(totalProviders * 0.12)} this month`, subColor: "text-green-500" },
-              { label: "Verified Providers", value: Math.floor(totalProviders * 0.95).toString(), sub: "+5.1%", subColor: "text-green-500" },
-              { label: "Approved Posts", value: approvedPosts.toString(), sub: "Live on platform", subColor: "text-gray-400" },
+              { label: "Pending Verifications", value: pendingPosts.toString(),                       sub: "Requiring action",          subColor: "text-orange-500" },
+              { label: "Active Providers",       value: totalProviders.toString(),                     sub: `+${Math.floor(totalProviders * 0.12)} this month`, subColor: "text-green-500" },
+              { label: "Verified Providers",     value: Math.floor(totalProviders * 0.95).toString(), sub: "+5.1%",                     subColor: "text-green-500" },
+              { label: "Approved Posts",         value: approvedPosts.toString(),                      sub: "Live on platform",          subColor: "text-gray-400" },
             ]}
           />
         );
       case "customers":
         return (
-          <UsersSection title="Customer Management" subtitle="Manage and monitor service seekers on the platform."
-            roleFilter="seeker" users={users} loading={loading}
+          <UsersSection
+            title="Customer Management"
+            subtitle="Manage and monitor service seekers on the platform."
+            roleFilter="seeker"
+            users={users} loading={loading}
             statsCards={[
-              { label: "Total Customers", value: totalSeekers.toString(), sub: "+8.3% this month", subColor: "text-green-500" },
-              { label: "Active This Month", value: Math.floor(totalSeekers * 0.38).toString(), sub: "+5.2%", subColor: "text-green-500" },
-              { label: "New Sign-ups", value: Math.floor(totalSeekers * 0.05).toString(), sub: "Last 30 days", subColor: "text-blue-500" },
-              { label: "Avg. Session Time", value: "6.4 min", sub: "Goal: > 5 min", subColor: "text-gray-400" },
+              { label: "Total Customers",    value: totalSeekers.toString(),                    sub: "+8.3% this month", subColor: "text-green-500" },
+              { label: "Active This Month",  value: Math.floor(totalSeekers * 0.38).toString(), sub: "+5.2%",            subColor: "text-green-500" },
+              { label: "New Sign-ups",       value: Math.floor(totalSeekers * 0.05).toString(), sub: "Last 30 days",     subColor: "text-blue-500" },
+              { label: "Avg. Session Time",  value: "6.4 min",                                  sub: "Goal: > 5 min",    subColor: "text-gray-400" },
             ]}
           />
         );
-      case "posts":    return <PostManagement posts={posts} />;
-      case "approval": return <AdminPostManagement />;
+      case "posts":
+        return <PostManagement posts={posts} />;
+      case "approval":
+        return <Approval posts={posts} onPostsChange={loadData} />;
     }
   };
 
-  const Sidebar = ({ mobile = false }) => (
+  const SidebarContent = ({ mobile = false }) => (
     <div className={`flex flex-col h-full ${mobile ? "p-4" : "p-5"}`}>
       {mobile && (
         <div className="flex items-center justify-between mb-6">
-          <span className="font-rostex text-xl text-[#0072D1]">admin</span>
+          
           <button onClick={() => setSidebar(false)} className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center">
             <X className="w-4 h-4 text-gray-600" />
           </button>
@@ -1495,10 +1486,8 @@ const AdminDashboard: React.FC = () => {
             <button
               key={item.key}
               onClick={() => { setSection(item.key); setSidebar(false); }}
-              className={`relative flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-200 text-left group
-                ${isActive ? "bg-[#FF5A00] text-white shadow-md" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}
+              className={`relative flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-200 text-left group ${isActive ? "bg-[#FF5A00] text-white shadow-md" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}
             >
-              {/* Active left indicator */}
               {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white/40 rounded-r-full" />}
               <item.icon className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${!isActive ? "group-hover:scale-110" : ""}`} />
               <span className="flex-1 text-left">{item.label}</span>
@@ -1511,17 +1500,15 @@ const AdminDashboard: React.FC = () => {
           );
         })}
       </nav>
-      <button className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-400 hover:bg-red-50 transition-colors mt-auto md:mt-0 group">
-        <LogOut className="w-4 h-4 group-hover:scale-110 transition-transform" /> Logout
-      </button>
+      
     </div>
   );
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-gray-50 font-sans overflow-hidden">
-      {/* Mobile Top Header */}
+      {/* Mobile header */}
       <div className="md:hidden flex items-center justify-between bg-white px-4 py-3 border-b border-gray-100 flex-shrink-0 z-20">
-        <span className="font-rostex text-xl text-[#0072D1]">Admin</span>
+        
         <div className="flex items-center gap-2">
           {pendingPosts > 0 && (
             <span className="text-[10px] font-black bg-[#FF5A00] text-white px-2 py-0.5 rounded-full animate-pulse">
@@ -1534,10 +1521,9 @@ const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Desktop Sidebar */}
+      {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-56 bg-white border-r border-gray-100 flex-shrink-0">
         <div className="px-5 py-4 border-b border-gray-100">
-          
           {!loading && pendingPosts > 0 && (
             <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-orange-500 bg-orange-50 border border-orange-100 px-2.5 py-1.5 rounded-lg">
               <AlertCircle className="w-3 h-3 flex-shrink-0" />
@@ -1545,18 +1531,18 @@ const AdminDashboard: React.FC = () => {
             </div>
           )}
         </div>
-        <Sidebar />
+        <SidebarContent />
       </aside>
 
-      {/* Mobile Sidebar Drawer */}
+      {/* Mobile sidebar drawer */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSidebar(false)} />
-          <div className="relative w-64 bg-white h-full flex flex-col shadow-2xl"><Sidebar mobile /></div>
+          <div className="relative w-64 bg-white h-full flex flex-col shadow-2xl"><SidebarContent mobile /></div>
         </div>
       )}
 
-      {/* Main area */}
+      {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <main className="flex-1 overflow-y-auto px-4 sm:px-5 md:px-6 py-5 md:py-6">
           {renderContent()}

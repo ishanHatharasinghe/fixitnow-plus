@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Search, SlidersHorizontal, ChevronDown, X } from "lucide-react";
 
 // Make sure these paths match your actual project structure
@@ -79,6 +80,43 @@ const HomePage = () => {
   const [selectedProvinces, setSelectedProvinces] = useState<string[]>([]);
   const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
 
+  // Navigation hook
+  const navigate = useNavigate();
+
+  // Navigation function to BrowsePlace with filters
+  const navigateToBrowsePlace = () => {
+    const params = new URLSearchParams();
+    
+    // Add selected services
+    if (selectedServices.length > 0) {
+      params.set("services", selectedServices.join(","));
+    }
+    
+    // Add price range
+    if (priceMin !== "1500") {
+      params.set("priceMin", priceMin);
+    }
+    if (priceMax !== "100000") {
+      params.set("priceMax", priceMax);
+    }
+    
+    // Add emergency service
+    if (emergencyService) {
+      params.set("emergency", emergencyService);
+    }
+    
+    // Add location filters
+    if (selectedProvinces.length > 0) {
+      params.set("provinces", selectedProvinces.join(","));
+    }
+    if (selectedDistricts.length > 0) {
+      params.set("cities", selectedDistricts.join(","));
+    }
+    
+    // Navigate to BrowsePlace with filters
+    navigate(`/browseplace?${params.toString()}`);
+  };
+
   // Toggles for checkboxes
   const toggleService = (service: string) => {
     if (selectedServices.includes(service)) {
@@ -109,8 +147,8 @@ const HomePage = () => {
 
   const resetFilters = () => {
     setSelectedServices([]);
-    setPriceMin("");
-    setPriceMax("");
+    setPriceMin("1500");
+    setPriceMax("100000");
     setEmergencyService(null);
     setSelectedProvinces([]);
     setSelectedDistricts([]);
@@ -218,7 +256,10 @@ const HomePage = () => {
             </button>
 
             {/* Find button */}
-            <button className="relative overflow-hidden flex items-center justify-center gap-2 px-8 md:px-10 h-14 md:h-16 rounded-lg md:rounded-full bg-[#FF5A00] text-white font-bold text-sm md:text-lg shadow-lg transition-all duration-300 hover:bg-black hover:scale-105 group flex-shrink-0">
+            <button 
+              onClick={navigateToBrowsePlace}
+              className="relative overflow-hidden flex items-center justify-center gap-2 px-8 md:px-10 h-14 md:h-16 rounded-lg md:rounded-full bg-[#FF5A00] text-white font-bold text-sm md:text-lg shadow-lg transition-all duration-300 hover:bg-black hover:scale-105 group flex-shrink-0"
+            >
               <Search
                 className="w-5 h-5 md:w-6 md:h-6 relative z-10"
                 strokeWidth={2.5}

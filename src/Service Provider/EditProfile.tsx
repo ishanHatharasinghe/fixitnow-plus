@@ -497,6 +497,7 @@ const EditProfile: React.FC = () => {
 
   const [formData, setFormData] = useState({
     displayName: "",
+    lastName: "",
     email: "",
     phoneNumber: "",
     address: "",
@@ -519,19 +520,25 @@ const EditProfile: React.FC = () => {
         }
 
         const userData = await userService.getUser(currentUser.uid);
+        console.log('[EditProfile] fetched userData:', userData);
         if (userData) {
           setFormData({
             displayName: userData.displayName || "",
-            email: currentUser.email || "",
+            lastName:    (userData as any).lastName    || "",
+            email:       currentUser.email    || "",
             phoneNumber: userData.phoneNumber || "",
-            address: userData.address || "",
-            country: userData.country || "",
-            city: userData.city || "",
-            division: userData.division || "",
-            postalCode: userData.postalCode || "",
-            nic: userData.nic || "",
-            bio: userData.bio || "",
-            availableServices: userData.availableServices || []
+            address:     typeof userData.address === "string"
+                           ? userData.address
+                           : userData.address && typeof userData.address === "object"
+                           ? Object.values(userData.address as Record<string,string>).filter(Boolean).join(", ")
+                           : "",
+            country:     (userData as any).country    || "",
+            city:        (userData as any).city       || "",
+            division:    (userData as any).division   || "",
+            postalCode:  (userData as any).postalCode || "",
+            nic:         userData.nic        || "",
+            bio:         userData.bio        || "",
+            availableServices: userData.availableServices || [],
           });
         }
       } catch (err) {
@@ -586,15 +593,16 @@ const EditProfile: React.FC = () => {
       }
 
       await userService.updatePersonalInfo(currentUser.uid, {
-        displayName: formData.displayName,
-        phoneNumber: formData.phoneNumber,
-        address: formData.address,
-        country: formData.country,
-        city: formData.city,
-        division: formData.division,
-        postalCode: formData.postalCode,
-        nic: formData.nic,
-        bio: formData.bio
+        displayName:  formData.displayName,
+        lastName:     (formData as any).lastName,
+        phoneNumber:  formData.phoneNumber,
+        address:      formData.address,
+        country:      (formData as any).country,
+        city:         (formData as any).city,
+        division:     (formData as any).division,
+        postalCode:   (formData as any).postalCode,
+        nic:          formData.nic,
+        bio:          formData.bio,
       });
 
       setSuccess("Personal information updated successfully!");

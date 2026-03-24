@@ -1,14 +1,27 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Search, User, Edit3, LogOut, Plus, Eye, Shield, Bell, CheckCheck, CheckCircle, XCircle } from "lucide-react";
+import { Search, User, Edit3, LogOut, Plus, Eye, Shield, Bell, CheckCheck, CheckCircle, XCircle, MessageSquare } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import MessagingUI from "./MessagingUI";
 import { notificationService, type AppNotification } from "../services/notificationService";
+import { searchService, type SearchResult } from "../services/searchService";
 
 const Navbar: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isMessagingOpen, setIsMessagingOpen] = useState(false);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<SearchResult[]>([]);
+  const [isSuggestionOpen, setIsSuggestionOpen] = useState(false);
+  const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const debounceTimerRef = useRef<number | null>(null);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -51,6 +64,13 @@ const Navbar: React.FC = () => {
         console.error("Failed to mark as read:", err);
       }
     }
+
+    // Handle message notifications by opening messaging interface
+    if (notif.type === "new_message" && notif.conversationId) {
+      setSelectedConversationId(notif.conversationId);
+      setIsMessagingOpen(true);
+    }
+
     setIsNotifOpen(false);
   };
 
@@ -67,6 +87,25 @@ const Navbar: React.FC = () => {
     if (isNotifOpen) document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [isNotifOpen]);
+
+  // Close search suggestions when clicking outside
+  useEffect(() => {
+    const closeSuggestions = (event: MouseEvent) => {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(event.target as Node)
+      ) {
+        setIsSuggestionOpen(false);
+      }
+    };
+
+    if (isSuggestionOpen) {
+      document.addEventListener("mousedown", closeSuggestions);
+    }
+    return () => {
+      document.removeEventListener("mousedown", closeSuggestions);
+    };
+  }, [isSuggestionOpen]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -133,6 +172,79 @@ const Navbar: React.FC = () => {
         }, 100);
       }
     }
+  };
+
+  const navigateToSearch = (searchTerm: string, route?: string) => {
+    const query = searchTerm.trim();
+    if (!query) return;
+    setIsSuggestionOpen(false);
+    setSearchQuery(query);
+
+    if (route) {
+      if (route.startsWith("/")) {
+        navigate(route);
+        return;
+      }
+    }
+
+    // fallback to global category search flow
+    navigate(`/browseplace?q=${encodeURIComponent(query)}`);
+  };
+
+  const clearSearchBar = () => {
+    setSearchQuery("");
+    setSuggestions([]);
+    setIsSuggestionOpen(false);
+    setSearchError(null);
+  };
+
+  const fetchSearchSuggestions = async (query: string) => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setSuggestions([]);
+      setIsSuggestionOpen(false);
+      setSearchError(null);
+      return;
+    }
+
+    setIsSuggestionsLoading(true);
+    setSearchError(null);
+
+    try {
+      const results = await searchService.search(q, 7);
+      setSuggestions(results);
+      setIsSuggestionOpen(results.length > 0);
+      if (results.length === 0) {
+        setSearchError(null);
+      }
+    } catch (err) {
+      console.error("Error fetching search suggestions:", err);
+      setSearchError("Failed to load suggestions. Please try again.");
+      setSuggestions([]);
+      setIsSuggestionOpen(false);
+    } finally {
+      setIsSuggestionsLoading(false);
+    }
+  };
+
+  const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    setIsSuggestionOpen(!!value.trim());
+
+    if (debounceTimerRef.current) {
+      window.clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = window.setTimeout(() => {
+      fetchSearchSuggestions(value);
+    }, 250);
+  };
+
+  const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!searchQuery.trim()) return;
+    navigateToSearch(searchQuery);
   };
 
   // Role-based dropdown links configuration
@@ -202,7 +314,8 @@ const Navbar: React.FC = () => {
   };
 
   return (
-    <nav className="w-full bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50">
+    <>
+      <nav className="w-full bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
@@ -217,39 +330,66 @@ const Navbar: React.FC = () => {
           </button>
 
           {/* Desktop Search Bar */}
-          <div className="hidden lg:flex flex-1 max-w-sm mx-6">
-            <div className="relative w-full">
+          <div className="hidden lg:flex flex-1 max-w-sm mx-6" ref={searchContainerRef}>
+            <form className="relative w-full" onSubmit={handleSearchSubmit}>
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="h-4 w-4 text-[#0072D1]" />
               </div>
               <input
+                ref={searchInputRef}
                 type="text"
-                placeholder="Search"
+                placeholder="Search services, categories, cities..."
+                value={searchQuery}
+                onChange={handleSearchInputChange}
                 className="block w-full pl-9 pr-4 py-2 border border-[#0072D1]/40 rounded-full bg-white
                   text-sm text-[#0072D1] placeholder-[#0072D1] focus:outline-none focus:ring-2
                   focus:ring-[#0072D1]/30 focus:border-[#0072D1] transition-all"
               />
-            </div>
+              {isSuggestionOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                  {isSuggestionsLoading ? (
+                    <div className="px-3 py-2 text-sm text-gray-700">Loading suggestions...</div>
+                  ) : searchError ? (
+                    <div className="px-3 py-2 text-sm text-red-500">{searchError}</div>
+                  ) : suggestions.length > 0 ? (
+                    suggestions.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => navigateToSearch(item.title, item.route)}
+                        className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors text-sm"
+                      >
+                        <div className="font-medium text-gray-900 truncate">{item.title}</div>
+                        <div className="text-xs text-gray-500 truncate">{item.subtitle || item.meta || ""}</div>
+                        <div className="text-[10px] text-gray-400 truncate">{item.route}</div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-sm text-gray-500">No suggestions found. Press Enter to search.</div>
+                  )}
+                </div>
+              )}
+            </form>
           </div>
 
           {/* Desktop Navigation and Buttons */}
-          <div className="hidden lg:flex items-center gap-5">
+          <div className="hidden lg:flex items-center gap-5 ">
             {/* Nav links */}
             <div className="flex gap-5 text-[#0072D1] font-medium text-sm">
               <button
-                className="hover:text-blue-800 transition-colors bg-transparent border-none outline-none cursor-pointer"
+                className="font-bold hover:text-Black transition-colors bg-transparent border-none outline-none cursor-pointer"
                 onClick={() => handleNavigation("home")}
               >
                 Home
               </button>
               <button
-                className="hover:text-blue-800 transition-colors bg-transparent border-none outline-none cursor-pointer"
+                className="font-bold hover:text-Black transition-colors bg-transparent border-none outline-none cursor-pointer"
                 onClick={() => handleNavigation("about")}
               >
                 About
               </button>
               <button
-                className="hover:text-blue-800 transition-colors bg-transparent border-none outline-none cursor-pointer"
+                className="font-bold hover:text-Black transition-colors bg-transparent border-none outline-none cursor-pointer"
                 onClick={() => handleNavigation("contact")}
               >
                 Contact
@@ -281,6 +421,17 @@ const Navbar: React.FC = () => {
                   <Plus className="w-4 h-4" />
                   <span className="relative z-10">Add Post</span>
                   <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                </button>
+              )}
+
+              {/* Messages — only for logged-in users */}
+              {currentUser && (
+                <button
+                  onClick={() => setIsMessagingOpen(true)}
+                  className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-100 hover:bg-[#0072D1]/10 transition-colors"
+                  aria-label="Messages"
+                >
+                  <MessageSquare className="w-5 h-5 text-gray-600" />
                 </button>
               )}
 
@@ -344,9 +495,17 @@ const Navbar: React.FC = () => {
                               className={`w-full text-left px-4 py-3 transition-colors hover:bg-gray-50 flex items-start gap-3 ${!notif.read ? "bg-[#0072D1]/5" : ""}`}
                             >
                               {/* Icon */}
-                              <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-0.5 ${notif.type === "post_approved" ? "bg-green-100" : "bg-red-100"}`}>
+                              <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-0.5 ${
+                                notif.type === "post_approved" 
+                                  ? "bg-green-100" 
+                                  : notif.type === "new_message"
+                                  ? "bg-blue-100"
+                                  : "bg-red-100"
+                              }`}>
                                 {notif.type === "post_approved"
                                   ? <CheckCircle className="w-4 h-4 text-green-600" />
+                                  : notif.type === "new_message"
+                                  ? <MessageSquare className="w-4 h-4 text-blue-600" />
                                   : <XCircle className="w-4 h-4 text-red-500" />
                                 }
                               </div>
@@ -519,23 +678,47 @@ const Navbar: React.FC = () => {
         <div className="lg:hidden bg-white border-t border-gray-100 shadow-lg">
           <div className="px-4 pt-4 pb-5 space-y-3">
             {/* Mobile Search */}
-            <div className="relative w-full">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-[#0072D1]" />
-              </div>
-              <input
-                type="text"
-                placeholder="Search"
-                className="block w-full pl-9 pr-4 py-2.5 border border-[#0072D1]/40 rounded-xl
-                  bg-white text-sm text-[#0072D1] placeholder-[#0072D1] focus:outline-none
-                  focus:ring-2 focus:ring-[#0072D1]/30"
-              />
-            </div>
-
-            {/* Mobile Navigation Links */}
-            <div className="flex flex-col gap-1 pb-3 border-b border-gray-100">
+            <div className="relative w-full" ref={searchContainerRef}>
+              <form onSubmit={handleSearchSubmit}>
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-4 w-4 text-[#0072D1]" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search services, categories, cities..."
+                  value={searchQuery}
+                  onChange={handleSearchInputChange}
+                  className="block w-full pl-9 pr-4 py-2.5 border border-[#0072D1]/40 rounded-xl
+                    bg-white text-sm text-[#0072D1] placeholder-[#0072D1] focus:outline-none
+                    focus:ring-2 focus:ring-[#0072D1]/30"
+                />
+              </form>
+              {isSuggestionOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                  {isSuggestionsLoading ? (
+                    <div className="px-3 py-2 text-sm text-gray-700">Loading suggestions...</div>
+                  ) : searchError ? (
+                    <div className="px-3 py-2 text-sm text-red-500">{searchError}</div>
+                  ) : suggestions.length > 0 ? (
+                    suggestions.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => navigateToSearch(item.title, item.route)}
+                        className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors text-sm"
+                      >
+                        <div className="font-medium text-gray-900 truncate">{item.title}</div>
+                        <div className="text-xs text-gray-500 truncate">{item.subtitle || item.meta || ""}</div>
+                        <div className="text-[10px] text-gray-400 truncate">{item.route}</div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-sm text-gray-500">No suggestions found. Press Enter to search.</div>
+                  )}
+                </div>
+              )}
               <button
-                className="text-[#0072D1] font-medium text-sm px-2 py-1.5 rounded-lg hover:bg-blue-50 transition-colors bg-transparent border-none outline-none cursor-pointer"
+                className="font-bold text-[#0072D1] font-medium text-sm px-2 py-1.5 rounded-lg hover:bg-blue-50 transition-colors bg-transparent border-none outline-none cursor-pointer"
                 onClick={() => {
                   handleNavigation("home");
                   setIsMobileMenuOpen(false);
@@ -544,7 +727,7 @@ const Navbar: React.FC = () => {
                 Home
               </button>
               <button
-                className="text-[#0072D1] font-medium text-sm px-2 py-1.5 rounded-lg hover:bg-blue-50 transition-colors bg-transparent border-none outline-none cursor-pointer"
+                className="font-bold text-[#0072D1] font-medium text-sm px-2 py-1.5 rounded-lg hover:bg-blue-50 transition-colors bg-transparent border-none outline-none cursor-pointer"
                 onClick={() => {
                   handleNavigation("about");
                   setIsMobileMenuOpen(false);
@@ -553,7 +736,7 @@ const Navbar: React.FC = () => {
                 About
               </button>
               <button
-                className="text-[#0072D1] font-medium text-sm px-2 py-1.5 rounded-lg hover:bg-blue-50 transition-colors bg-transparent border-none outline-none cursor-pointer"
+                className="font-bold text-[#0072D1] font-medium text-sm px-2 py-1.5 rounded-lg hover:bg-blue-50 transition-colors bg-transparent border-none outline-none cursor-pointer"
                 onClick={() => {
                   handleNavigation("contact");
                   setIsMobileMenuOpen(false);
@@ -673,6 +856,18 @@ const Navbar: React.FC = () => {
         </div>
       )}
     </nav>
+
+      {/* Messaging UI */}
+      <MessagingUI
+        isOpen={isMessagingOpen}
+        onClose={() => {
+          setIsMessagingOpen(false);
+          setSelectedConversationId(undefined);
+        }}
+        showSidebar={true}
+        initialConversationId={selectedConversationId}
+      />
+    </>
   );
 };
 

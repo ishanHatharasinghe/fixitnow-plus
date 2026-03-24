@@ -15,9 +15,7 @@ function App() {
       </div>
       <MiniFindService />
       <MiniAddPost />
-      <div id="contact">
-        <Footer />
-      </div>
+      <div id="contact" className="h-0" />
     </>
   );
 }

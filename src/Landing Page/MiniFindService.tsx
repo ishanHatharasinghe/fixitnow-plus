@@ -161,6 +161,43 @@ const ChooseCity = () => {
   const [filterProvinces, setFilterProvinces] = useState<string[]>([]);
   const [filterDistricts, setFilterDistricts] = useState<string[]>([]);
 
+  // ── Navigation with filters ──
+  const navigateToBrowsePlace = () => {
+    const params = new URLSearchParams();
+    
+    // Add selected services
+    if (selectedServices.length > 0) {
+      params.set("services", selectedServices.join(","));
+    }
+    
+    // Add selected location (city or province)
+    if (selectedCity) {
+      params.set("cities", selectedCity);
+    } else if (selectedProvince) {
+      params.set("provinces", selectedProvince);
+    }
+    
+    // Add filter drawer values
+    if (filterProvinces.length > 0) {
+      params.set("provinces", filterProvinces.join(","));
+    }
+    if (filterDistricts.length > 0) {
+      params.set("cities", filterDistricts.join(","));
+    }
+    if (priceMin !== "1500") {
+      params.set("priceMin", priceMin);
+    }
+    if (priceMax !== "100000") {
+      params.set("priceMax", priceMax);
+    }
+    if (emergencyService) {
+      params.set("emergency", emergencyService);
+    }
+    
+    // Navigate to BrowsePlace with filters
+    navigate(`/browseplace?${params.toString()}`);
+  };
+
   // ── Close service dropdown on outside click ──
   useEffect(() => {
     if (!isServiceOpen) return;
@@ -384,7 +421,10 @@ const ChooseCity = () => {
           </button>
 
           {/* Find button */}
-          <button className="relative overflow-hidden flex items-center justify-center gap-2 px-8 md:px-10 h-14 md:h-16 rounded-xl md:rounded-2xl bg-[#FF5A00] text-white font-bold text-sm md:text-lg shadow-lg transition-all duration-300 hover:bg-black hover:scale-105 group flex-shrink-0">
+          <button 
+            onClick={navigateToBrowsePlace}
+            className="relative overflow-hidden flex items-center justify-center gap-2 px-8 md:px-10 h-14 md:h-16 rounded-xl md:rounded-2xl bg-[#FF5A00] text-white font-bold text-sm md:text-lg shadow-lg transition-all duration-300 hover:bg-black hover:scale-105 group flex-shrink-0"
+          >
             <Search
               className="w-5 h-5 md:w-6 md:h-6 relative z-10"
               strokeWidth={2.5}

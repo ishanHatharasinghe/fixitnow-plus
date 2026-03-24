@@ -38,7 +38,7 @@ import { db } from "../firebase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type NotificationType = "post_approved" | "post_rejected";
+export type NotificationType = "post_approved" | "post_rejected" | "new_message";
 
 export interface AppNotification {
   id: string;
@@ -46,8 +46,10 @@ export interface AppNotification {
   type: NotificationType;
   title: string;
   message: string;
-  postId: string;
-  postTitle: string;
+  postId?: string;
+  postTitle?: string;
+  conversationId?: string;
+  senderName?: string;
   read: boolean;
   createdAt: Date;
 }
@@ -74,6 +76,8 @@ function docToNotification(snap: any): AppNotification {
     message: d.message ?? "",
     postId: d.postId ?? "",
     postTitle: d.postTitle ?? "",
+    conversationId: d.conversationId ?? "",
+    senderName: d.senderName ?? "",
     read: d.read ?? false,
     createdAt: toDate(d.createdAt),
   };
@@ -186,5 +190,26 @@ export const notificationService = {
     const batch = writeBatch(db);
     snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
     await batch.commit();
+  },
+
+  /**
+   * Called when a new message is sent to notify the recipient.
+   */
+  async createMessageNotification(
+    recipientId: string,
+    conversationId: string,
+    senderName: string,
+    messageText: string
+  ): Promise<void> {
+    await addDoc(notificationsCol, {
+      recipientId,
+      type: "new_message" as NotificationType,
+      title: `New message from ${senderName}`,
+      message: messageText.length > 50 ? `${messageText.substring(0, 50)}...` : messageText,
+      conversationId,
+      senderName,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
   },
 };
