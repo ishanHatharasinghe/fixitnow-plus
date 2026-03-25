@@ -754,15 +754,27 @@ const UserProfile: React.FC = () => {
   };
 
   const handleDeletePost = async (postId: string) => {
-    if (!window.confirm("Are you sure you want to delete this post? This cannot be undone.")) return;
-    try {
-      await postService.deletePost(postId);
-      setProviderPosts(prev => prev.filter(p => p.id !== postId));
-    } catch (err) {
-      console.error("Error deleting post:", err);
+  const post = providerPosts.find(p => p.id === postId);
+  const statusLabel = post?.status === 'approved'
+    ? 'approved (it will be removed from public listings)'
+    : post?.status ?? 'this';
+
+  if (!window.confirm(
+    `Are you sure you want to delete this ${statusLabel} post? This cannot be undone.`
+  )) return;
+
+  try {
+    await postService.deletePost(postId);
+    setProviderPosts(prev => prev.filter(p => p.id !== postId));
+  } catch (err: any) {
+    console.error("Error deleting post:", err);
+    if (err?.code === 'permission-denied') {
+      alert("Permission denied. You can only delete your own posts.");
+    } else {
       alert("Failed to delete post. Please try again.");
     }
-  };
+  }
+};
 
   const handleEditProfileClick = () => {
     navigate('/edit-profile');

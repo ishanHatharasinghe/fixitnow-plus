@@ -237,6 +237,7 @@ function App() {
               </ProtectedRoute>
             } />
 
+
             {/* ── Catch-all ─────────────────────────────────────────────────── */}
 
             <Route path="*" element={

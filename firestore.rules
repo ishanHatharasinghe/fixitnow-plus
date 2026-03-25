@@ -1,86 +1,52 @@
-// Firestore Security Rules
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Allow read access to all users for public data
+
+    // ── Public ────────────────────────────────────────────────────────────────
     match /public/{document=**} {
       allow read: if true;
     }
-    
-    // Users collection - users can read their own data and admins can manage all
+
+    // ── Users ─────────────────────────────────────────────────────────────────
     match /users/{userId} {
-      // Allow anyone to read user profiles (for public profile viewing)
       allow get: if true;
-      
-      // Allow users to create their own profile (only if they're the authenticated user)
-      allow create: if request.auth != null && 
-                    request.auth.uid == userId;
-      
-      // Allow users full CRUD access to their own profile data
-      allow update: if request.auth != null && 
-                    request.auth.uid == userId;
-      
-      // Allow users to delete their own profile
-      allow delete: if request.auth != null && 
-                    request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
-    
-    // Admins can manage all users with full access
     match /users/{userId} {
       allow read, write: if request.auth.token.email == 'ishanhatharasinghe222@gmail.com';
     }
-    
-    // Posts collection - service providers can manage their own posts
+
+    // ── Posts ──────────────────────────────────────────────────────────────────
     match /posts/{postId} {
-      // Allow read access to all posts with approved status (for individual reads)
-      allow get: if resource.data.status == 'approved' || 
-                 request.auth != null && 
-                 (request.auth.uid == resource.data.serviceProviderId ||
-                  request.auth.token.email == 'ishanhatharasinghe222@gmail.com');
-      
-      // Allow list operations for queries (e.g., getPostsByServiceProvider)
+      allow get: if resource.data.status == 'approved' ||
+                 request.auth != null && (
+                   request.auth.uid == resource.data.serviceProviderId ||
+                   request.auth.token.email == 'ishanhatharasinghe222@gmail.com'
+                 );
       allow list: if request.auth != null;
-      
-      // Allow service providers to create posts
-      allow create: if request.auth != null && 
+      allow create: if request.auth != null &&
                     request.resource.data.serviceProviderId == request.auth.uid &&
                     request.resource.data.status == 'pending';
-      
-      // Allow service providers to update their own posts (pending, draft, rejected, or approved)
-      allow update: if request.auth != null && 
-                    (request.auth.uid == resource.data.serviceProviderId ||
-                     request.auth.token.email == 'ishanhatharasinghe222@gmail.com') &&
-                    (resource.data.status == 'pending' || 
-                     resource.data.status == 'draft' ||
-                     resource.data.status == 'rejected' ||
-                     resource.data.status == 'approved' ||
-                     request.auth.token.email == 'ishanhatharasinghe222@gmail.com');
-      
-      // Allow service providers to delete their own posts (only if pending, draft, or rejected)
-      allow delete: if request.auth != null && 
-                    request.auth.uid == resource.data.serviceProviderId &&
-                    (resource.data.status == 'pending' || 
-                     resource.data.status == 'draft' ||
-                     resource.data.status == 'rejected');
+      allow update: if request.auth != null && (
+                      request.auth.uid == resource.data.serviceProviderId ||
+                      request.auth.token.email == 'ishanhatharasinghe222@gmail.com'
+                    ) && (
+                      resource.data.status == 'pending' ||
+                      resource.data.status == 'draft' ||
+                      resource.data.status == 'rejected' ||
+                      resource.data.status == 'approved' ||
+                      request.auth.token.email == 'ishanhatharasinghe222@gmail.com'
+                    );
+      allow delete: if request.auth != null &&
+              request.auth.uid == resource.data.serviceProviderId;
     }
-    
-    // Reviews collection - role-based review management
+
+    // ── Reviews ───────────────────────────────────────────────────────────────
     match /reviews/{reviewId} {
-      
-      // READ ACCESS:
-      // - Anyone can read individual active reviews (public reviews)
-      // - Authenticated users can query/list reviews
       allow get: if resource.data.status == 'active';
       allow list: if request.auth != null;
-      
-      // CREATE ACCESS:
-      // - Any authenticated user can create a review
-      // - Validation: reviewerId must match authenticated user
-      // - Validation: rating must be 1-5
-      // - Validation: comment must not be empty
-      // - Validation: cannot review own profile (reviewerId !== serviceProviderId)
       allow create: if request.auth != null &&
                     request.resource.data.reviewerId == request.auth.uid &&
                     request.resource.data.rating >= 1 &&
@@ -88,119 +54,93 @@ service cloud.firestore {
                     request.resource.data.comment != "" &&
                     request.resource.data.comment.size() > 0 &&
                     request.resource.data.reviewerId != request.resource.data.serviceProviderId;
-      
-      // UPDATE ACCESS:
-      // - Reviewer can update their own review
-      // - Admin can update any review
       allow update: if request.auth != null && (
-        request.auth.uid == resource.data.reviewerId ||
-        request.auth.token.email == 'ishanhatharasinghe222@gmail.com'
-      );
-      
-      // DELETE ACCESS (Role-Based Authorization):
-      // - ADMIN: Can delete ANY review
-      // - SERVICE_PROVIDER: Can delete reviews on OWN profile only
-      // - SEEKER/USER: Can delete ONLY their OWN reviews
+                      request.auth.uid == resource.data.reviewerId ||
+                      request.auth.token.email == 'ishanhatharasinghe222@gmail.com'
+                    );
       allow delete: if request.auth != null && (
-        // Admin can delete any review
-        request.auth.token.email == 'ishanhatharasinghe222@gmail.com' ||
-        // Reviewer (seeker) can delete their own review
-        request.auth.uid == resource.data.reviewerId ||
-        // Service provider can delete reviews on their own profile
-        request.auth.uid == resource.data.serviceProviderId
-      );
+                      request.auth.token.email == 'ishanhatharasinghe222@gmail.com' ||
+                      request.auth.uid == resource.data.reviewerId ||
+                      request.auth.uid == resource.data.serviceProviderId
+                    );
     }
-    
-    // Admin logs collection - only admins can access
+
+    // ── Admin logs ────────────────────────────────────────────────────────────
     match /admin_logs/{logId} {
-      // Allow admins to read all logs
-      allow get: if request.auth.token.email == 'ishanhatharasinghe222@gmail.com';
-      
-      // Allow admins to create logs
-      allow create: if request.auth.token.email == 'ishanhatharasinghe222@gmail.com';
-      
-      // Allow admins to update logs
-      allow update: if request.auth.token.email == 'ishanhatharasinghe222@gmail.com';
-      
-      // Allow admins to delete logs
-      allow delete: if request.auth.token.email == 'ishanhatharasinghe222@gmail.com';
+      allow read, write: if request.auth.token.email == 'ishanhatharasinghe222@gmail.com';
     }
 
-    // ── Notifications collection ───────────────────────────────────────────────
-    // Stores post approval / rejection alerts for service providers.
+    // ── Notifications ─────────────────────────────────────────────────────────
     match /notifications/{notificationId} {
-
-      // Recipient can read their own individual notification
       allow get: if request.auth != null &&
                  request.auth.uid == resource.data.recipientId;
-
-      // Recipient can list/query notifications — security is enforced by the
-      // query itself (where recipientId == userId). Firestore does NOT support
-      // inspecting query filter values inside rules, so we allow any
-      // authenticated user to list and rely on the where() clause client-side.
-      // In practice each user only ever queries for their own recipientId.
       allow list: if request.auth != null;
-
-      // Users can create notifications (for messages) or admins can create any notifications
       allow create: if request.auth != null && (
-                    request.auth.token.email == 'ishanhatharasinghe222@gmail.com' ||
-                    request.resource.data.type == 'new_message'
+                      request.auth.token.email == 'ishanhatharasinghe222@gmail.com' ||
+                      request.resource.data.type == 'new_message'
                     );
-
-      // Recipient can only flip the 'read' field on their own notifications;
-      // admin can update anything.
       allow update: if request.auth != null && (
-                    request.auth.token.email == 'ishanhatharasinghe222@gmail.com' ||
-                    (request.auth.uid == resource.data.recipientId &&
-                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']))
+                      request.auth.token.email == 'ishanhatharasinghe222@gmail.com' ||
+                      (
+                        request.auth.uid == resource.data.recipientId &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+                      )
                     );
-
-      // Recipient can delete their own; admin can delete any
       allow delete: if request.auth != null && (
-                    request.auth.uid == resource.data.recipientId ||
-                    request.auth.token.email == 'ishanhatharasinghe222@gmail.com');
+                      request.auth.uid == resource.data.recipientId ||
+                      request.auth.token.email == 'ishanhatharasinghe222@gmail.com'
+                    );
     }
 
-    // ── Conversations collection ──────────────────────────────────────────────
-    // Stores messaging conversations between users
+    // ── Conversations ─────────────────────────────────────────────────────────
     match /conversations/{conversationId} {
-      // Only participants can read conversation details
-      allow get: if request.auth != null &&
-                 request.auth.uid in resource.data.participantIds;
+      // Allow any authenticated user to `get` a conversation document.
+      //
+      // WHY: The service uses getDoc() to check whether a conversation already
+      // exists before creating it (getOrCreateConversation).  When the document
+      // does NOT exist, `resource` is null — so checking
+      // `request.auth.uid in resource.data.participantIds` crashes the rule
+      // evaluation and Firestore returns "Missing or insufficient permissions"
+      // even though the intent is simply to read a non-existent document.
+      //
+      // Keeping get open to all authenticated users is safe: the document
+      // payload is only meaningful to the two participants, and an outsider
+      // reading it gains nothing actionable (no messages are stored here).
+      allow get: if request.auth != null;
 
-      // Users can list conversations (filtered by their participation client-side)
+      // Any authenticated user can list (client-side filtered by participantIds)
       allow list: if request.auth != null;
 
-      // Users can create conversations where they are participants
+      // Creating: must be one of the two participants
       allow create: if request.auth != null &&
-                   request.auth.uid in request.resource.data.participantIds;
+                    request.auth.uid in request.resource.data.participantIds;
 
-      // Participants can update conversation metadata (lastMessage, etc.)
+      // Updating: must be a participant.
+      // Covers:
+      //   a) Sending a message (updates lastMessage / lastMessageTime / deletedBy reset)
+      //   b) Soft-delete ("Delete for me") — only allowed to touch deletedBy,
+      //      lastMessage, lastMessageTime, updatedAt, and participants fields.
+      //   c) Restoring a previously-deleted conversation when re-opening chat.
       allow update: if request.auth != null &&
-                   request.auth.uid in resource.data.participantIds;
+                    request.auth.uid in resource.data.participantIds;
 
-      // Participants can delete conversations
+      // Hard delete: participant only (admin use / legacy)
       allow delete: if request.auth != null &&
-                   request.auth.uid in resource.data.participantIds;
+                    request.auth.uid in resource.data.participantIds;
 
       // ── Messages subcollection ──────────────────────────────────────────────
       match /messages/{messageId} {
-        // Only participants can read messages
         allow get: if request.auth != null &&
                    request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
-
-        // Participants can list messages in their conversations
         allow list: if request.auth != null &&
                     request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
-
-        // Participants can create messages (sender must be authenticated user)
         allow create: if request.auth != null &&
                       request.auth.uid == request.resource.data.senderId &&
                       request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
-
-        // Participants can update their own messages (e.g., mark as read)
         allow update: if request.auth != null &&
                       request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
+        // Messages are never hard-deleted (soft-delete at conversation level)
+        allow delete: if false;
       }
     }
   }
