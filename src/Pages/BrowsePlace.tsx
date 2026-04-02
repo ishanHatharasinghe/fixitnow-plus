@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Search,
@@ -564,6 +564,8 @@ const BrowsePlace = () => {
   const routerLocation = useLocation();
 
   const [citySearch, setCitySearch] = useState("");
+  const [debouncedCitySearch, setDebouncedCitySearch] = useState("");
+  const citySearchDebounceRef = useRef<number | null>(null);
   const [isServiceOpen, setIsServiceOpen] = useState(false);
   const serviceDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -625,7 +627,7 @@ const BrowsePlace = () => {
     const fetchPosts = async () => {
       try {
         setLoading(true);
-        const approvedPosts = await postService.getPostsByStatus("approved");
+        const approvedPosts = await postService.getPostsByStatus("approved", 100);
         setPosts(approvedPosts);
       } catch (error) {
         console.error("Error fetching posts:", error);
@@ -648,10 +650,24 @@ const BrowsePlace = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, [isServiceOpen]);
 
+  // ── Debounce city search input ───────────────────────────────────────────────
+  useEffect(() => {
+    if (citySearchDebounceRef.current) clearTimeout(citySearchDebounceRef.current);
+    
+    citySearchDebounceRef.current = window.setTimeout(() => {
+      setDebouncedCitySearch(citySearch);
+      setCurrentPage(1);
+    }, 300);
+
+    return () => {
+      if (citySearchDebounceRef.current) clearTimeout(citySearchDebounceRef.current);
+    };
+  }, [citySearch]);
+
   // ── Reset to page 1 on any filter change ────────────────────────────────────
   useEffect(() => {
     setCurrentPage(1);
-  }, [citySearch, selectedServices, priceMin, priceMax, emergencyService, selectedDistricts, selectedProvinces]);
+  }, [debouncedCitySearch, selectedServices, priceMin, priceMax, emergencyService, selectedDistricts, selectedProvinces]);
 
   // ── Pre-compute province → cities map ───────────────────────────────────────
   const provinceCitiesMap = useMemo(() => {
@@ -666,8 +682,8 @@ const BrowsePlace = () => {
 
       // ── 1. Keyword / city search ────────────────────────────────────────────
       // Searches across location, specificCities, title, description, keywords, category
-      if (citySearch.trim()) {
-        const q = norm(citySearch);
+      if (debouncedCitySearch.trim()) {
+        const q = norm(debouncedCitySearch);
         const matchesSearch =
           norm(post.location).includes(q) ||
           norm(post.specificCities).includes(q) ||
@@ -761,7 +777,7 @@ const BrowsePlace = () => {
     });
   }, [
     posts,
-    citySearch,
+    debouncedCitySearch,
     selectedServices,
     priceMin,
     priceMax,
@@ -779,16 +795,19 @@ const BrowsePlace = () => {
   );
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
-  const toggleService = (s: string) =>
-    setSelectedServices((p) => p.includes(s) ? p.filter((x) => x !== s) : [...p, s]);
+  const toggleService = useCallback((s: string) =>
+    setSelectedServices((p) => p.includes(s) ? p.filter((x) => x !== s) : [...p, s])
+  , []);
 
-  const toggleProvince = (p: string) =>
-    setSelectedProvinces((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]);
+  const toggleProvince = useCallback((p: string) =>
+    setSelectedProvinces((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p])
+  , []);
 
-  const toggleDistrict = (d: string) =>
-    setSelectedDistricts((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]);
+  const toggleDistrict = useCallback((d: string) =>
+    setSelectedDistricts((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d])
+  , []);
 
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     setSelectedServices([]);
     setPriceMin("");
     setPriceMax("");
@@ -796,7 +815,7 @@ const BrowsePlace = () => {
     setSelectedProvinces([]);
     setSelectedDistricts([]);
     setCitySearch("");
-  };
+  }, []);
 
   const serviceLabel =
     selectedServices.length === 0

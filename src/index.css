@@ -11,9 +11,60 @@
 
 body {
   font-family: 'Poppins', sans-serif;
+  scrollbar-gutter: stable;
 }
 
 .font-rostex {
   font-family: 'Rostex', sans-serif !important;
+}
+
+/* Custom Scrollbar Styling */
+html::-webkit-scrollbar {
+  width: 10px;
+}
+
+html::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #3b82f6, #8b5cf6);
+  border-radius: 10px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+html::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #2563eb, #7c3aed);
+  opacity: 1;
+}
+
+html.scrolling::-webkit-scrollbar-thumb {
+  opacity: 0.8;
+}
+
+/* Firefox Scrollbar */
+html {
+  scrollbar-color: transparent transparent;
+  scrollbar-width: thin;
+  transition: scrollbar-color 0.3s ease;
+}
+
+html.scrolling {
+  scrollbar-color: rgba(59, 130, 246, 0.8) transparent;
+}
+
+/* Additional smooth scrollbar animation */
+@keyframes fadeInScrollbar {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.8;
+  }
+}
+
+html.scrolling::-webkit-scrollbar-thumb {
+  animation: fadeInScrollbar 0.2s ease forwards;
 }
 

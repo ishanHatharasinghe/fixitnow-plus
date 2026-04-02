@@ -24,10 +24,14 @@ import {
   Loader,
   Bell,
   CheckCheck,
-  CheckCircle,
-  XCircle,
+  CircleCheck,
+  BadgeX,
+  CalendarCheck,
+  MessageSquareWarning,
+  BookUp,
   Clock,
   AlertCircle,
+  XCircle,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -504,11 +508,13 @@ const NotificationsPanel = ({
   loading,
   onMarkAllRead,
   onMarkOneRead,
+  onNotificationClick,
 }: {
   notifications: AppNotification[];
   loading: boolean;
   onMarkAllRead: () => void;
   onMarkOneRead: (id: string) => void;
+  onNotificationClick?: (notif: AppNotification) => void;
 }) => {
   const unread = notifications.filter((n) => !n.read).length;
 
@@ -558,7 +564,10 @@ const NotificationsPanel = ({
           {notifications.map((notif) => (
             <div
               key={notif.id}
-              onClick={() => { if (!notif.read) onMarkOneRead(notif.id); }}
+              onClick={() => {
+                if (!notif.read) onMarkOneRead(notif.id);
+                if (onNotificationClick) onNotificationClick(notif);
+              }}
               className={`flex items-start gap-4 p-4 rounded-2xl border transition-all cursor-pointer hover:shadow-sm
                 ${!notif.read
                   ? "bg-[#0072D1]/5 border-[#0072D1]/20 hover:bg-[#0072D1]/8"
@@ -566,16 +575,22 @@ const NotificationsPanel = ({
                 }`}
             >
               <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center
-                ${notif.type === "post_approved" ? "bg-green-100" : "bg-red-100"}`}>
+                ${(notif.type === "post_approved" || notif.type === "booking_approved") ? "bg-green-100" : notif.type === "booking_request" ? "bg-purple-100" : notif.type === "new_message" ? "bg-blue-100" : "bg-red-100"}`}>
                 {notif.type === "post_approved"
-                  ? <CheckCircle className="w-5 h-5 text-green-600" />
-                  : <XCircle className="w-5 h-5 text-red-500" />
+                  ? <CircleCheck className="w-5 h-5 text-green-600" />
+                  : notif.type === "booking_approved"
+                  ? <CalendarCheck className="w-5 h-5 text-green-600" />
+                  : notif.type === "booking_request"
+                  ? <BookUp className="w-5 h-5 text-purple-600" />
+                  : notif.type === "new_message"
+                  ? <MessageSquareWarning className="w-5 h-5 text-blue-600" />
+                  : <BadgeX className="w-5 h-5 text-red-500" />
                 }
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <p className={`text-sm font-bold leading-snug
-                    ${notif.type === "post_approved" ? "text-green-700" : "text-red-600"}`}>
+                    ${(notif.type === "post_approved" || notif.type === "booking_approved") ? "text-green-700" : notif.type === "booking_request" ? "text-purple-700" : notif.type === "new_message" ? "text-blue-700" : "text-red-600"}`}>
                     {notif.title}
                   </p>
                   {!notif.read && (
@@ -663,6 +678,30 @@ const UserProfile: React.FC = () => {
     } catch (err) {
       console.error("Failed to mark notification as read:", err);
     }
+  };
+
+  const handleNotificationClick = (notif: AppNotification) => {
+    // Navigate based on notification type, matching navbar behavior
+    if (notif.type === "new_message" && notif.conversationId) {
+      // Open messaging - navigate to profile with messages focus
+      navigate("/profile");
+      return;
+    }
+
+    if (notif.type === "post_approved" || notif.type === "post_declined") {
+      // Navigate to posts tab
+      setTab("posts");
+      return;
+    }
+
+    if (notif.type === "booking_approved" || notif.type === "booking_declined" || notif.type === "booking_request") {
+      // Navigate to bookings page
+      navigate("/bookings");
+      return;
+    }
+
+    // Default: stay on notifications tab
+    setTab("notifications");
   };
 
   // ── Fetch posts ───────────────────────────────────────────────────────────
@@ -976,6 +1015,7 @@ const UserProfile: React.FC = () => {
               loading={loadingNotifications}
               onMarkAllRead={handleMarkAllRead}
               onMarkOneRead={handleMarkOneRead}
+              onNotificationClick={handleNotificationClick}
             />
           )}
         </div>
@@ -1102,6 +1142,7 @@ const UserProfile: React.FC = () => {
               loading={loadingNotifications}
               onMarkAllRead={handleMarkAllRead}
               onMarkOneRead={handleMarkOneRead}
+              onNotificationClick={handleNotificationClick}
             />
           )}
         </div>

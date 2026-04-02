@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, type ReactNode } from 
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate, useParams } from "react-router-dom";
 import { postService } from "../services/postService";
+import { userService } from "../services/userService";
 import {
   ArrowRight,
   Edit3,
@@ -84,6 +85,53 @@ const DAYS = [
   "Saturday",
   "Sunday"
 ];
+
+// ─── District to Province Mapping ─────────────────────────────────────────────
+
+const DISTRICT_TO_PROVINCE: Record<string, string> = {
+  // Western Province
+  "Colombo": "Western Province",
+  "Gampaha": "Western Province",
+  "Kalutara": "Western Province",
+  // Central Province
+  "Kandy": "Central Province",
+  "Matale": "Central Province",
+  "NuwaraEliya": "Central Province",
+  "Nuwara Eliya": "Central Province",
+  // Southern Province
+  "Galle": "Southern Province",
+  "Matara": "Southern Province",
+  "Hambantota": "Southern Province",
+  // Eastern Province
+  "Trincomalee": "Eastern Province",
+  "Batticaloa": "Eastern Province",
+  "Ampara": "Eastern Province",
+  // North Western Province
+  "Kurunegala": "North Western Province",
+  "Puttalam": "North Western Province",
+  // North Central Province
+  "Anuradhapura": "North Central Province",
+  "Polonnaruwa": "North Central Province",
+  // Uva Province
+  "Badulla": "Uva Province",
+  "Moneragala": "Uva Province",
+  // Sabaragamuwa Province
+  "Kegalle": "Sabaragamuwa Province",
+  "Ratnapura": "Sabaragamuwa Province",
+  // Northern Province
+  "Jaffna": "Northern Province",
+  "Kilinochchi": "Northern Province",
+  "Mannar": "Northern Province",
+  "Mullaitivu": "Northern Province",
+  "Vavuniya": "Northern Province"
+};
+
+// Helper function to get province from district
+const getProvinceFromDistrict = (district: string): string => {
+  // Normalize the district name (remove spaces, lowercase for matching)
+  const normalizedDistrict = district.trim();
+  return DISTRICT_TO_PROVINCE[normalizedDistrict] || "";
+};
 
 // ─── Initial form state ───────────────────────────────────────────────────────
 
@@ -547,12 +595,18 @@ const DetailsStep = ({
   form,
   set,
   onNext,
-  isEditMode = false
+  isEditMode = false,
+  onAutofill,
+  hasProfileData,
+  hasAutoFilled
 }: {
   form: FormType;
   set: React.Dispatch<React.SetStateAction<FormType>>;
   onNext: () => void;
   isEditMode?: boolean;
+  onAutofill?: () => void;
+  hasProfileData?: boolean;
+  hasAutoFilled?: boolean;
 }) => {
   const [checkItem, setCheckItem] = useState("");
   const [errors, setErrors] = useState<Record<string, string | null>>({});
@@ -637,8 +691,59 @@ const DetailsStep = ({
 
   const err = (name: string) => (touched[name] ? errors[name] : null);
 
+  // Show autofill banner if profile data is available and not yet autofilled
+  const showAutofillBanner = !isEditMode && hasProfileData && !hasAutoFilled;
+
   return (
     <div className="space-y-8">
+      {/* ── Autofill Banner ── */}
+      {showAutofillBanner && onAutofill && (
+        <div className="bg-gradient-to-r from-[#0072D1]/10 to-[#0072D1]/5 border-2 border-[#0072D1]/30 rounded-2xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[#0072D1]/20 rounded-lg flex items-center justify-center flex-shrink-0">
+              <User className="w-5 h-5 text-[#0072D1]" strokeWidth={2.5} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-[#0072D1]">
+                Auto-fill Available
+              </p>
+              <p className="text-xs text-[#0072D1]/80 mt-0.5">
+                Fill in your profile details automatically
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onAutofill}
+            className="relative overflow-hidden flex items-center gap-2 px-5 py-2.5 rounded-full
+              bg-[#0072D1] text-white text-sm font-bold
+              transition-all duration-300 hover:bg-black hover:scale-105 group shadow-lg"
+          >
+            <span className="relative z-10">Auto-fill</span>
+            <div
+              className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full
+              group-hover:translate-x-full transition-transform duration-700 rounded-full"
+            />
+          </button>
+        </div>
+      )}
+
+      {/* ── Already Autofilled Banner ── */}
+      {hasAutoFilled && (
+        <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0">
+            <CheckCircle className="w-5 h-5 text-emerald-600" strokeWidth={2.5} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-emerald-800">
+              Profile Auto-filled
+            </p>
+            <p className="text-xs text-emerald-700 mt-0.5">
+              Your profile details have been automatically filled. Please review and edit as needed.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Edit Mode Banner ── */}
       {isEditMode && (
         <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 flex items-start gap-3">
@@ -1635,12 +1740,91 @@ const PostYourAdd = () => {
   const [form, setForm] = useState(INITIAL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [loadingPost, setLoadingPost] = useState(false);
-  const { currentUser } = useAuth();
+  const [userProfileData, setUserProfileData] = useState<any>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [hasAutoFilled, setHasAutoFilled] = useState(false);
+  const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
   const { postId } = useParams<{ postId?: string }>();
 
   // When a postId param is present we are in EDIT mode
   const isEditMode = Boolean(postId);
+
+  // ── Fetch user profile data for autofill ────────────────────────────────────
+  useEffect(() => {
+    // Only fetch profile data for new posts (not edit mode) and only once
+    if (isEditMode || hasAutoFilled || !currentUser?.uid) return;
+
+    const fetchUserProfile = async () => {
+      try {
+        setIsLoadingProfile(true);
+        const userData = await userService.getUser(currentUser.uid);
+        if (userData) {
+          setUserProfileData(userData);
+        }
+      } catch (err) {
+        console.error("Error fetching user profile for autofill:", err);
+      } finally {
+        setIsLoadingProfile(false);
+      }
+    };
+
+    fetchUserProfile();
+  }, [currentUser?.uid, isEditMode, hasAutoFilled]);
+
+  // ── Autofill handler ────────────────────────────────────────────────────────
+  const handleAutofill = () => {
+    if (!userProfileData) return;
+
+    const userData = userProfileData;
+
+    // Extract phone number without country code
+    let phoneNumber = userData.phoneNumber || "";
+    // Remove +94 or 94 prefix if present
+    phoneNumber = phoneNumber.replace(/^\+94/, "").replace(/^94/, "");
+
+    // Get province from district/address
+    const address = userData.address;
+    let province = "";
+    let specificCities = "";
+    let fullAddress = "";
+
+    if (address) {
+      if (typeof address === "string") {
+        fullAddress = address;
+      } else {
+        // Address is an object with street, city, state, postalCode, country
+        const district = address.state || "";
+        province = getProvinceFromDistrict(district);
+        specificCities = address.city || "";
+        fullAddress = [
+          address.street,
+          address.city,
+          address.state,
+          address.postalCode
+        ].filter(Boolean).join(", ");
+      }
+    }
+
+    // Get service category from availableServices
+    const category = userData.availableServices?.[0] || "";
+
+    // Build the autofill data
+    const autofillData: Partial<FormType> = {
+      ownerName: userData.displayName || userData.firstName || "",
+      email: userData.email || "",
+      mobile: phoneNumber,
+      nic: userData.nic || "",
+      ownerAddress: fullAddress,
+      category: category,
+      location: province,
+      specificCities: specificCities
+    };
+
+    // Update form with autofill data
+    setForm(prev => ({ ...prev, ...autofillData }));
+    setHasAutoFilled(true);
+  };
 
   // ── Prefill form when editing ──────────────────────────────────────────────
   useEffect(() => {
@@ -1834,6 +2018,9 @@ const PostYourAdd = () => {
                   set={setForm}
                   onNext={() => setStep(1)}
                   isEditMode={isEditMode}
+                  onAutofill={handleAutofill}
+                  hasProfileData={!!userProfileData}
+                  hasAutoFilled={hasAutoFilled}
                 />
               )}
               {step === 1 && (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Star,  Filter, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { Star,  Filter, ChevronDown, ChevronUp, Loader2, Trash2, AlertTriangle } from 'lucide-react';
 import ReviewCard from './ReviewCard';
 import { reviewService } from '../services/reviewService';
 import type { Review } from '../services/reviewService';
@@ -39,6 +39,10 @@ const ReviewsList: React.FC<ReviewsListProps> = ({
   const [ratingDistribution, setRatingDistribution] = useState<Record<number, number>>({
     1: 0, 2: 0, 3: 0, 4: 0, 5: 0
   });
+  
+  // Delete all reviews state
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState<boolean>(false);
+  const [deleteAllLoading, setDeleteAllLoading] = useState<boolean>(false);
 
 
   useEffect(() => {
@@ -117,6 +121,27 @@ const ReviewsList: React.FC<ReviewsListProps> = ({
     }
   };
 
+  const handleDeleteAllReviews = async () => {
+    setDeleteAllLoading(true);
+    try {
+      const result = await reviewService.deleteAllReviewsByServiceProvider(
+        serviceProviderId,
+        currentUser?.uid || '',
+        userRole as UserRole
+      );
+      setShowDeleteAllModal(false);
+      setError(null);
+      fetchReviews(); // Refresh the list
+      // Optionally show a success message
+      console.log(result.message);
+    } catch (err: any) {
+      console.error('Error deleting all reviews:', err);
+      setError(err.message || 'Failed to delete all reviews. Please try again.');
+    } finally {
+      setDeleteAllLoading(false);
+    }
+  };
+
   const handleEditReview = (reviewId: string) => {
     // This would typically open an edit modal
     // For now, we'll just log the action
@@ -170,39 +195,54 @@ const ReviewsList: React.FC<ReviewsListProps> = ({
             </div>
             
             {/* Sort Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <Filter className="w-4 h-4" />
-                <span className="text-sm font-medium">{getSortLabel(sortOption)}</span>
-                {isSortDropdownOpen ? (
-                  <ChevronUp className="w-4 h-4 text-gray-500" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-gray-500" />
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <button
+                  onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <Filter className="w-4 h-4" />
+                  <span className="text-sm font-medium">{getSortLabel(sortOption)}</span>
+                  {isSortDropdownOpen ? (
+                    <ChevronUp className="w-4 h-4 text-gray-500" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-gray-500" />
+                  )}
+                </button>
+                
+                {isSortDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-10">
+                    {(['newest', 'oldest', 'highest', 'lowest'] as SortOption[]).map((option) => (
+                      <button
+                        key={option}
+                        onClick={() => {
+                          setSortOption(option);
+                          setIsSortDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm ${
+                          sortOption === option
+                            ? 'bg-blue-50 text-blue-700 font-medium'
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {getSortLabel(option)}
+                      </button>
+                    ))}
+                  </div>
                 )}
-              </button>
-              
-              {isSortDropdownOpen && (
-                <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-10">
-                  {(['newest', 'oldest', 'highest', 'lowest'] as SortOption[]).map((option) => (
-                    <button
-                      key={option}
-                      onClick={() => {
-                        setSortOption(option);
-                        setIsSortDropdownOpen(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 text-sm ${
-                        sortOption === option
-                          ? 'bg-blue-50 text-blue-700 font-medium'
-                          : 'text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      {getSortLabel(option)}
-                    </button>
-                  ))}
-                </div>
+              </div>
+
+              {/* Delete All Reviews Button - Only for Service Providers */}
+              {userRole === 'service_provider' && currentUser?.uid === serviceProviderId && totalReviews > 0 && (
+                <button
+                  onClick={() => setShowDeleteAllModal(true)}
+                  disabled={deleteAllLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Delete all reviews on your account"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span className="text-sm font-medium">Delete All</span>
+                </button>
               )}
             </div>
           </div>
@@ -309,6 +349,62 @@ const ReviewsList: React.FC<ReviewsListProps> = ({
           </>
         )}
       </div>
+
+      {/* Delete All Reviews Confirmation Modal */}
+      {showDeleteAllModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowDeleteAllModal(false)}
+          />
+
+          {/* Modal */}
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle className="w-6 h-6 text-red-500" />
+              <h2 className="text-lg font-bold text-gray-900">Delete All Reviews?</h2>
+            </div>
+
+            {/* Message */}
+            <p className="text-sm text-gray-600 mb-2">
+              This action will permanently delete all {totalReviews} review{totalReviews !== 1 ? 's' : ''} on your account.
+            </p>
+            <p className="text-sm text-red-600 font-semibold mb-6">
+              This action cannot be undone.
+            </p>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteAllModal(false)}
+                disabled={deleteAllLoading}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAllReviews}
+                disabled={deleteAllLoading}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 font-medium flex items-center justify-center gap-2"
+              >
+                {deleteAllLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Delete All
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

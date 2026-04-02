@@ -126,12 +126,13 @@ export const postService = {
   },
 
   /**
-   * Fetch posts by status.
+   * Fetch posts by status with optional pagination limit.
    * NO orderBy — sorted client-side.
+   * @param limit - Number of posts to fetch (default 100 for initial load)
    */
-  async getPostsByStatus(status: Post['status']): Promise<Post[]> {
+  async getPostsByStatus(status: Post['status'], limitCount: number = 100): Promise<Post[]> {
     const snap = await getDocs(
-      query(postsCollection, where('status', '==', status))
+      query(postsCollection, where('status', '==', status), limit(limitCount))
     );
     return sortNewest(snap.docs.map(docToPost));
   },
@@ -144,10 +145,10 @@ export const postService = {
     return sortNewest(snap.docs.map(docToPost));
   },
 
-  /** Approved posts for public BrowsePlace */
-  async getApprovedPosts(): Promise<Post[]> {
+  /** Approved posts for public BrowsePlace — now with pagination support */
+  async getApprovedPosts(limitCount: number = 100): Promise<Post[]> {
     const snap = await getDocs(
-      query(postsCollection, where('status', '==', 'approved'))
+      query(postsCollection, where('status', '==', 'approved'), limit(limitCount))
     );
     return sortNewest(snap.docs.map(docToPost));
   },

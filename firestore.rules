@@ -55,8 +55,11 @@ service cloud.firestore {
                     request.resource.data.comment.size() > 0 &&
                     request.resource.data.reviewerId != request.resource.data.serviceProviderId;
       allow update: if request.auth != null && (
-                      request.auth.uid == resource.data.reviewerId ||
-                      request.auth.token.email == 'ishanhatharasinghe222@gmail.com'
+                      // REACTIONS: ANY authenticated user (seeker, provider, admin) can toggle reactions
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'likedBy', 'updatedAt']) ||
+                      // CONTENT EDITS: Only reviewer or admin can edit review comment/rating
+                      (request.auth.uid == resource.data.reviewerId ||
+                       request.auth.token.email == 'ishanhatharasinghe222@gmail.com')
                     );
       allow delete: if request.auth != null && (
                       request.auth.token.email == 'ishanhatharasinghe222@gmail.com' ||
@@ -77,7 +80,9 @@ service cloud.firestore {
       allow list: if request.auth != null;
       allow create: if request.auth != null && (
                       request.auth.token.email == 'ishanhatharasinghe222@gmail.com' ||
-                      request.resource.data.type == 'new_message'
+                      request.resource.data.type == 'new_message' ||
+                      request.resource.data.type == 'booking_request' ||
+                      request.resource.data.type in ['booking_approved', 'booking_declined', 'booking_cancelled']
                     );
       allow update: if request.auth != null && (
                       request.auth.token.email == 'ishanhatharasinghe222@gmail.com' ||
@@ -90,6 +95,86 @@ service cloud.firestore {
                       request.auth.uid == resource.data.recipientId ||
                       request.auth.token.email == 'ishanhatharasinghe222@gmail.com'
                     );
+    }
+
+    // ── Bookings ───────────────────────────────────────────────────────────────
+    match /bookings/{bookingId} {
+      // Read: customer, provider, or admin
+      allow get: if request.auth != null &&
+                 (request.auth.uid == resource.data.customerId ||
+                  request.auth.uid == resource.data.providerId ||
+                  request.auth.token.email == 'ishanhatharasinghe222@gmail.com');
+      
+      // List: any authenticated user (client-side filtered by customerId/providerId)
+      allow list: if request.auth != null;
+      
+      // Create: any authenticated user can create bookings for themselves, or admin can create for anyone
+      allow create: if request.auth != null && (
+                    (request.auth.uid == request.resource.data.customerId &&
+                     request.resource.data.status == 'pending' &&
+                     request.resource.data.customerId != null &&
+                     request.resource.data.providerId != null &&
+                     request.resource.data.bookingDate != null) ||
+                    request.auth.token.email == 'ishanhatharasinghe222@gmail.com'
+                   );
+      
+      // Update: provider approves/declines, customer cancels/completes, admin can do all
+      // Helper function to check if user is admin
+      allow update: if request.auth != null && (
+                      // Provider: approve pending bookings
+                      (request.auth.uid == resource.data.providerId &&
+                       request.resource.data.status == 'approved' &&
+                       resource.data.status == 'pending' &&
+                       // Provider cannot modify other fields when approving
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+                      // Provider: decline pending bookings (with reason)
+                      (request.auth.uid == resource.data.providerId &&
+                       request.resource.data.status == 'declined' &&
+                       resource.data.status == 'pending' &&
+                       request.resource.data.declinedReason != null &&
+                       request.resource.data.declinedReason.size() > 0 &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'declinedReason', 'updatedAt'])) ||
+                      // Provider: decline approved bookings (with reason)
+                      (request.auth.uid == resource.data.providerId &&
+                       request.resource.data.status == 'declined' &&
+                       resource.data.status == 'approved' &&
+                       request.resource.data.declinedReason != null &&
+                       request.resource.data.declinedReason.size() > 0 &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'declinedReason', 'updatedAt'])) ||
+                      // Provider: cancel approved bookings (with reason)
+                      (request.auth.uid == resource.data.providerId &&
+                       request.resource.data.status == 'cancelled' &&
+                       resource.data.status == 'approved' &&
+                       request.resource.data.cancellationReason != null &&
+                       request.resource.data.cancellationReason.size() > 0 &&
+                       request.resource.data.cancelledBy == 'provider' &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancellationReason', 'cancelledBy', 'updatedAt'])) ||
+                      // Customer: cancel pending bookings
+                      (request.auth.uid == resource.data.customerId &&
+                       request.resource.data.status == 'cancelled' &&
+                       resource.data.status == 'pending' &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+                      // Customer: cancel approved bookings (with reason)
+                      (request.auth.uid == resource.data.customerId &&
+                       request.resource.data.status == 'cancelled' &&
+                       resource.data.status == 'approved' &&
+                       request.resource.data.cancellationReason != null &&
+                       request.resource.data.cancellationReason.size() > 0 &&
+                       request.resource.data.cancelledBy in ['customer', 'admin'] &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancellationReason', 'cancelledBy', 'updatedAt'])) ||
+                      // Customer: mark completed on approved bookings
+                      (request.auth.uid == resource.data.customerId &&
+                       request.resource.data.status == 'completed' &&
+                       resource.data.status == 'approved' &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+                      // Admin: full control
+                      request.auth.token.email == 'ishanhatharasinghe222@gmail.com'
+                    );
+      
+      // Delete: customer or admin (soft-delete via cancel recommended)
+      allow delete: if request.auth != null &&
+                    (request.auth.token.email == 'ishanhatharasinghe222@gmail.com' ||
+                     request.auth.uid == resource.data.customerId);
     }
 
     // ── Conversations ─────────────────────────────────────────────────────────

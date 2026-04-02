@@ -11,11 +11,13 @@
  * Collection: /notifications/{notificationId}
  * Fields:
  *   recipientId  : uid of the user who receives the notification
- *   type         : "post_approved" | "post_rejected"
+ *   type         : "post_approved" | "post_declined" | "booking_approved" | "booking_declined" | "new_message"
  *   title        : short heading shown in the bell dropdown
  *   message      : full message body
  *   postId       : the related post id
  *   postTitle    : human-readable post title
+ *   conversationId : the related conversation id (for messages)
+ *   senderName   : the sender's name (for messages)
  *   read         : boolean — false until the user marks it read
  *   createdAt    : serverTimestamp
  */
@@ -38,7 +40,7 @@ import { db } from "../firebase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type NotificationType = "post_approved" | "post_rejected" | "new_message";
+export type NotificationType = "post_approved" | "post_declined" | "booking_approved" | "booking_declined" | "booking_request" | "booking_cancelled" | "new_message";
 
 export interface AppNotification {
   id: string;
@@ -124,8 +126,8 @@ export const notificationService = {
   ): Promise<void> {
     await addDoc(notificationsCol, {
       recipientId,
-      type: "post_rejected" as NotificationType,
-      title: "Post Rejected",
+      type: "post_declined" as NotificationType,
+      title: "Post Declined",
       message: `Your post "${postTitle}" was not approved. Reason: ${reason}`,
       postId,
       postTitle,
@@ -208,6 +210,113 @@ export const notificationService = {
       message: messageText.length > 50 ? `${messageText.substring(0, 50)}...` : messageText,
       conversationId,
       senderName,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  },
+
+  async createBookingStatusNotification(
+    recipientId: string,
+    bookingId: string,
+    status: "approved" | "declined" | "completed" | "cancelled"
+  ): Promise<void> {
+    const titles: Record<string, string> = {
+      approved: "Booking Approved",
+      declined: "Booking Declined",
+      completed: "Booking Completed",
+      cancelled: "Booking Cancelled",
+    };
+    const messages: Record<string, string> = {
+      approved: "Your booking has been approved by the service provider.",
+      declined: "Sorry, your booking has been declined by the service provider.",
+      completed: "Great news! Your booking is marked as completed.",
+      cancelled: "Your booking has been cancelled.",
+    };
+    await addDoc(notificationsCol, {
+      recipientId,
+      type: status === "approved" ? "booking_approved" : status === "declined" ? "booking_declined" : "post_approved",
+      title: titles[status],
+      message: messages[status],
+      postId: bookingId,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  },
+
+  async createBookingRequestNotification(
+    recipientId: string,
+    bookingId: string,
+    customerName: string,
+    bookingDate: Date
+  ): Promise<void> {
+    await addDoc(notificationsCol, {
+      recipientId,
+      type: "booking_request" as NotificationType,
+      title: "New Booking Request",
+      message: `${customerName} requested a booking for ${bookingDate.toLocaleString()}`,
+      postId: bookingId,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  },
+
+  /**
+   * Called when a booking is cancelled by customer/admin after approval.
+   * Notifies the service provider with the cancellation reason.
+   */
+  async createBookingCancelledByCustomerNotification(
+    recipientId: string,
+    bookingId: string,
+    customerName: string,
+    reason: string
+  ): Promise<void> {
+    await addDoc(notificationsCol, {
+      recipientId,
+      type: "booking_cancelled" as NotificationType,
+      title: "Booking Cancelled by Customer",
+      message: `${customerName} cancelled the booking. Reason: ${reason}`,
+      postId: bookingId,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  },
+
+  /**
+   * Called when a booking is cancelled/declined by service provider after approval.
+   * Notifies the customer with the cancellation reason.
+   */
+  async createBookingCancelledByProviderNotification(
+    recipientId: string,
+    bookingId: string,
+    providerName: string,
+    reason: string
+  ): Promise<void> {
+    await addDoc(notificationsCol, {
+      recipientId,
+      type: "booking_cancelled" as NotificationType,
+      title: "Booking Cancelled by Service Provider",
+      message: `The service provider cancelled the booking. Reason: ${reason}`,
+      postId: bookingId,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  },
+
+  /**
+   * Called when a booking with reason is declined by service provider.
+   * Notifies the customer with the decline reason.
+   */
+  async createBookingDeclinedWithReasonNotification(
+    recipientId: string,
+    bookingId: string,
+    reason: string
+  ): Promise<void> {
+    await addDoc(notificationsCol, {
+      recipientId,
+      type: "booking_declined" as NotificationType,
+      title: "Booking Declined",
+      message: `Your booking has been declined. Reason: ${reason}`,
+      postId: bookingId,
       read: false,
       createdAt: serverTimestamp(),
     });

@@ -35,12 +35,7 @@ const ShareYourAdd = () => {
 
         {/* Description */}
         <p className="text-gray-600 text-sm md:text-base leading-relaxed max-w-2xl mb-10 font-medium">
-          Discover the smarter way to rent effortlessly list your boarding
-          rooms, houses, hostels, or luxury apartments on our all-in-one
-          platform. We bridge the gap between property owners and a vibrant
-          community of renters actively searching for their perfect place to
-          call home. Whether it's a cozy room or a lavish apartment, we make
-          connecting simple, fast, and stress-free.
+          Discover the smarter way to get hired! Effortlessly post your services from plumbing to home painting on our all-in-one platform. We bridge the gap between skilled experts and local customers searching for reliable help. Create your advertisement today and make connecting simple, fast, and stress-free.
         </p>
 
         {/* Human image */}

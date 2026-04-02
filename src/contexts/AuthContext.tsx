@@ -10,6 +10,7 @@ interface UserProfile {
   email: string;
   displayName?: string;
   photoURL?: string;
+  profilePicture?: string; // Added to support Firestore field name
   firstName?: string;
   lastName?: string;
   role: 'seeker' | 'service_provider' | 'admin';
@@ -56,8 +57,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
             const userData = userDoc.data() as UserProfile;
+            // Normalize profile picture field - Firestore may store it as 'profilePicture'
+            // while Firebase Auth uses 'photoURL'. Map both to ensure consistency.
+            const profileImage = userData.profilePicture || userData.photoURL || user.photoURL || '';
             setUserProfile({
               ...userData,
+              photoURL: profileImage,
+              // Also set profilePicture for backward compatibility
+              profilePicture: profileImage as any,
               createdAt: userData.createdAt ? new Date(userData.createdAt) : undefined,
               updatedAt: userData.updatedAt ? new Date(userData.updatedAt) : undefined
             });

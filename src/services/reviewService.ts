@@ -10,6 +10,8 @@ export interface Review {
   rating: number; // 1-5
   comment: string;
   helpful?: number;
+  likes?: number; // Reaction count (heart reactions)
+  likedBy?: string[]; // Array of user IDs who reacted
   createdAt: Date | Timestamp;
   updatedAt: Date | Timestamp;
   isVerified?: boolean;
@@ -62,6 +64,8 @@ export const reviewService = {
       ...reviewData,
       id: reviewRef.id,
       helpful: 0,
+      likes: 0,
+      likedBy: [],
       status: 'active',
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now()
@@ -310,5 +314,99 @@ export const reviewService = {
         updatedAt: Timestamp.now()
       });
     }
+  },
+
+  /**
+   * TOGGLE REVIEW REACTION (HEART)
+   * Adds or removes a user's reaction to a review
+   */
+  async toggleReaction(reviewId: string, userId: string): Promise<{ liked: boolean; count: number }> {
+    const reviewRef = doc(reviewsCollection, reviewId);
+    const reviewSnap = await getDoc(reviewRef);
+
+    if (!reviewSnap.exists()) {
+      throw new Error('Review not found');
+    }
+
+    const reviewData = reviewSnap.data();
+    const currentLikes = reviewData.likes || 0;
+    const likedBy = reviewData.likedBy || [];
+
+    // Check if user already reacted
+    const userIndex = likedBy.indexOf(userId);
+    let newLikedBy: string[];
+    let newLikes: number;
+
+    if (userIndex > -1) {
+      // Remove reaction
+      newLikedBy = likedBy.filter((userIdInList: string) => userIdInList !== userId);
+      newLikes = Math.max(0, currentLikes - 1);
+    } else {
+      // Add reaction
+      newLikedBy = [...likedBy, userId];
+      newLikes = currentLikes + 1;
+    }
+
+    await updateDoc(reviewRef, {
+      likes: newLikes,
+      likedBy: newLikedBy,
+      updatedAt: Timestamp.now()
+    });
+
+    return {
+      liked: userIndex === -1,
+      count: newLikes
+    };
+  },
+
+  /**
+   * CHECK IF USER HAS REACTED
+   * Returns true if user has liked the review
+   */
+  async hasUserReacted(reviewId: string, userId: string): Promise<boolean> {
+    const reviewRef = doc(reviewsCollection, reviewId);
+    const reviewSnap = await getDoc(reviewRef);
+
+    if (!reviewSnap.exists()) return false;
+
+    const likedBy = reviewSnap.data().likedBy || [];
+    return likedBy.includes(userId);
+  },
+
+  /**
+   * DELETE ALL REVIEWS FOR SERVICE PROVIDER
+   * Only service provider or admin can delete all their reviews
+   * Admin can delete all reviews for any service provider
+   */
+  async deleteAllReviewsByServiceProvider(
+    serviceProviderId: string,
+    currentUserId: string,
+    userRole: UserRole
+  ): Promise<{ success: boolean; message: string; deletedCount: number }> {
+    // Authorization check
+    if (userRole === 'service_provider' && currentUserId !== serviceProviderId) {
+      throw new ReviewAuthorizationError('You do not have permission to delete these reviews');
+    }
+
+    if (userRole !== 'admin' && userRole !== 'service_provider') {
+      throw new ReviewAuthorizationError('Only service providers and admins can delete reviews');
+    }
+
+    // Get all reviews for the service provider
+    const q = query(
+      reviewsCollection,
+      where('serviceProviderId', '==', serviceProviderId)
+    );
+    const querySnapshot = await getDocs(q);
+
+    // Delete all reviews
+    const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(deletePromises);
+
+    return {
+      success: true,
+      message: `Successfully deleted ${querySnapshot.docs.length} review(s)`,
+      deletedCount: querySnapshot.docs.length
+    };
   }
 };

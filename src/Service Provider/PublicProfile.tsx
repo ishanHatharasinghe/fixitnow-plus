@@ -12,20 +12,28 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { reviewService } from "../services/reviewService";
 import MessageButton from "../Components/MessageButton";
+import ReviewsList from "../Components/ReviewsList";
+import { bookingService } from "../services/bookingService";
+import { notificationService } from "../services/notificationService";
+import BookingCalendar from "../Components/BookingCalendar";
 import {
   MapPin,
   Phone,
   Mail,
   Heart,
-  CornerDownLeft,
   User,
   X,
   List,
   Star,
   ChevronLeft,
   Loader,
+  MoreVertical,
+  Edit,
+  Trash2,
 } from "lucide-react";
+import DeleteConfirmationModal from "../Components/DeleteConfirmationModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,12 +66,44 @@ function toDateSafe(value: any): Date {
   return new Date(0);
 }
 
+// ─── Helper: Retry failed requests ────────────────────────────────────────────
+
+/**
+ * Retry a failed operation with exponential backoff.
+ * Useful for handling transient network/Firestore errors.
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+  initialDelayMs = 500
+): Promise<T> {
+  let lastError: any;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      console.warn(
+        `[PublicProfile] Attempt ${attempt + 1}/${maxRetries} failed:`,
+        err
+      );
+      if (attempt < maxRetries - 1) {
+        const delayMs = initialDelayMs * Math.pow(2, attempt);
+        console.log(`[PublicProfile] Retrying in ${delayMs}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  throw lastError;
+}
+
 // ─── Direct Firestore fetchers ────────────────────────────────────────────────
 
 /**
- * Fetch a single user document safely.
+ * Fetch a single user document safely with robust fallbacks.
  * FIX: Maps both `profilePicture` (Firestore field) and `photoURL` (Firebase Auth
  * field) so the profile image always resolves correctly.
+ * Also provides fallback values for email, phone, and other fields.
  */
 async function fetchUserDoc(uid: string): Promise<any | null> {
   try {
@@ -74,12 +114,31 @@ async function fetchUserDoc(uid: string): Promise<any | null> {
     }
     const data = snap.data();
     console.log("[PublicProfile] Fetched user doc:", uid, data); // debug — remove after confirming
+    
+    // Normalize all possible image fields for reliability
+    const profileImage = data.profilePicture || data.photoURL || data.avatar || data.image || "";
+    
+    // Normalize email field - check multiple possible field names
+    const email = data.email || data.userEmail || data.contactEmail || "";
+    
+    // Normalize phone field - check multiple possible field names
+    const phone = data.phoneNumber || data.phone || data.mobileNumber || data.contactPhone || "";
+    
     return {
       ...data,
       uid: snap.id,
       // Normalise the profile picture field — Firestore stores it as
       // `profilePicture`; Firebase Auth uses `photoURL`. Accept both.
-      profilePicture: data.profilePicture || data.photoURL || "",
+      profilePicture: profileImage,
+      photoURL: profileImage, // Also set photoURL for consistency
+      // Normalise email and phone
+      email: email || "",
+      phoneNumber: phone || "",
+      phone: phone || "",
+      // Ensure other fields have safe defaults
+      bio: data.bio || "",
+      address: data.address || "",
+      availableServices: Array.isArray(data.availableServices) ? data.availableServices : [],
       createdAt: toDateSafe(data.createdAt),
       updatedAt: toDateSafe(data.updatedAt),
     };
@@ -399,61 +458,231 @@ const PostCard = ({
 
 // ─── Review Card ──────────────────────────────────────────────────────────────
 
-const ReviewCard = ({ review }: { review: any }) => {
+const ReviewCard = ({ 
+  review, 
+  currentUserId, 
+  userRole, 
+  onEdit, 
+  onDelete 
+}: { 
+  review: any; 
+  currentUserId?: string; 
+  userRole?: string;
+  onEdit?: (review: any) => void;
+  onDelete?: (review: any) => void;
+}) => {
   const name = review.reviewerName || review.reviewer || "Anonymous";
-  const avatar = review.reviewerAvatar || review.avatar || "";
+  // Normalize avatar field - check multiple possible field names
+  const avatar = review.reviewerAvatar || review.avatar || review.photoURL || review.profilePicture || review.image || "";
   const text = review.comment || review.text || "";
   const time =
     review.createdAt instanceof Date
       ? review.createdAt.toLocaleDateString()
       : review.time || "";
 
+  // Reaction state
+  const [isReacting, setIsReacting] = useState(false);
+  const [userHasReacted, setUserHasReacted] = useState(false);
+  const [likeCount, setLikeCount] = useState(review.likes || 0);
+  
+  // Actions menu state
+  const [showActions, setShowActions] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  const isAuthenticated = !!currentUserId;
+
+  // Permission checks
+  const isReviewAuthor = isAuthenticated && review.reviewerId === currentUserId;
+  const canEdit = isReviewAuthor && (userRole === "seeker" || userRole === "admin");
+  const canDelete = isReviewAuthor || userRole === "service_provider" || userRole === "admin";
+  const showActionsMenu = canEdit || canDelete;
+
+  // Check if user has already reacted to this review
+  useEffect(() => {
+    if (!isAuthenticated || !review.id) return;
+
+    let cancelled = false;
+
+    const checkReaction = async () => {
+      try {
+        const hasReacted = await reviewService.hasUserReacted(review.id, currentUserId);
+        if (!cancelled) setUserHasReacted(hasReacted);
+      } catch (err) {
+        console.error("Error checking reaction:", err);
+      }
+    };
+
+    checkReaction();
+    return () => { cancelled = true; };
+  }, [review.id, currentUserId, isAuthenticated]);
+
+  // Toggle reaction (like/unlike)
+  const handleToggleReaction = async () => {
+    if (!isAuthenticated || isReacting) return;
+
+    // Optimistic update
+    const optimisticReacted = !userHasReacted;
+    const optimisticCount = optimisticReacted ? likeCount + 1 : likeCount - 1;
+    setUserHasReacted(optimisticReacted);
+    setLikeCount(Math.max(0, optimisticCount));
+
+    setIsReacting(true);
+    try {
+      const result = await reviewService.toggleReaction(review.id, currentUserId);
+      // Confirm with server truth
+      setUserHasReacted(result.liked);
+      setLikeCount(result.count);
+    } catch (err) {
+      // Roll back optimistic update on failure
+      setUserHasReacted(!optimisticReacted);
+      setLikeCount(likeCount);
+      console.error("Error toggling reaction:", err);
+    } finally {
+      setIsReacting(false);
+    }
+  };
+
+  const handleDelete = async (reason?: string) => {
+    if (onDelete) {
+      await onDelete({ ...review, deletionReason: reason });
+    }
+    setShowDeleteModal(false);
+  };
+
+  const handleEdit = () => {
+    if (onEdit) {
+      onEdit(review);
+    }
+    setShowActions(false);
+  };
+
+  // State for handling image load errors
+  const [imageError, setImageError] = useState(false);
+
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          {avatar ? (
-            <img
-              src={avatar}
-              alt={name}
-              className="w-11 h-11 rounded-full object-cover flex-shrink-0"
-            />
-          ) : (
-            <div className="w-11 h-11 rounded-full bg-[#0072D1]/10 flex items-center justify-center flex-shrink-0">
-              <User className="w-5 h-5 text-[#0072D1]" />
+    <>
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-3">
+            {avatar && !imageError ? (
+              <img
+                src={avatar}
+                alt={name}
+                className="w-11 h-11 rounded-full object-cover flex-shrink-0"
+                onError={() => setImageError(true)}
+              />
+            ) : (
+              <div className="w-11 h-11 rounded-full bg-[#0072D1]/10 flex items-center justify-center flex-shrink-0">
+                <User className="w-5 h-5 text-[#0072D1]" />
+              </div>
+            )}
+            <div>
+              <p className="font-bold text-gray-900 text-sm">{name}</p>
+              <p className="text-xs text-gray-400">{time}</p>
             </div>
-          )}
-          <div>
-            <p className="font-bold text-gray-900 text-sm">{name}</p>
-            <p className="text-xs text-gray-400">{time}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {review.rating && (
+              <div className="flex gap-0.5">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <Star
+                    key={s}
+                    className={`w-3.5 h-3.5 ${
+                      review.rating >= s
+                        ? "text-yellow-400 fill-yellow-400"
+                        : "text-gray-200"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+            {/* Actions Menu (3 dots) */}
+            {showActionsMenu && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowActions(!showActions)}
+                  className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+                  aria-label="Review actions"
+                >
+                  <MoreVertical className="w-4 h-4 text-gray-400" />
+                </button>
+
+                {showActions && (
+                  <>
+                    {/* Click-away backdrop */}
+                    <div
+                      className="fixed inset-0 z-0"
+                      onClick={() => setShowActions(false)}
+                    />
+                    <div className="absolute right-0 top-8 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-10">
+                      {canEdit && (
+                        <button
+                          onClick={handleEdit}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                        >
+                          <Edit className="w-3 h-3" />
+                          Edit Review
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => {
+                            setShowDeleteModal(true);
+                            setShowActions(false);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          Delete Review
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
-        {review.rating && (
-          <div className="flex gap-0.5">
-            {[1, 2, 3, 4, 5].map((s) => (
-              <Star
-                key={s}
-                className={`w-3.5 h-3.5 ${
-                  review.rating >= s
-                    ? "text-yellow-400 fill-yellow-400"
-                    : "text-gray-200"
+        <p className="text-sm text-gray-700 leading-relaxed mb-5">{text}</p>
+        <div className="flex items-center justify-end">
+          {isAuthenticated ? (
+            <button
+              onClick={handleToggleReaction}
+              disabled={isReacting}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 ${
+                userHasReacted
+                  ? "bg-red-50 text-red-600 hover:bg-red-100"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-red-500"
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              <Heart
+                className={`w-4 h-4 transition-all duration-200 ${
+                  userHasReacted ? "fill-red-600 scale-110" : ""
                 }`}
               />
-            ))}
-          </div>
-        )}
+              <span className="text-sm font-bold">{likeCount}</span>
+            </button>
+          ) : (
+            <span className="flex items-center gap-1.5 text-gray-600">
+              <Heart className="w-4 h-4" />
+              <span className="text-sm font-bold">{likeCount}</span>
+            </span>
+          )}
+        </div>
       </div>
-      <p className="text-sm text-gray-700 leading-relaxed mb-5">{text}</p>
-      <div className="flex items-center justify-between">
-        <button className="flex items-center gap-1.5 text-gray-600 hover:text-red-500 transition-colors">
-          <Heart className="w-4 h-4" />
-          <span className="text-sm font-bold">{review.likes || 0}</span>
-        </button>
-        <button className="flex items-center gap-1.5 text-gray-600 hover:text-[#0072D1] font-bold text-sm transition-colors">
-          Reply <CornerDownLeft className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <DeleteConfirmationModal
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          onConfirm={handleDelete}
+          isLoading={false}
+          reviewerName={name}
+          userRole={userRole as "seeker" | "service_provider" | "admin"}
+        />
+      )}
+    </>
   );
 };
 
@@ -472,20 +701,62 @@ const AddReviewModal = ({
   serviceProviderName: string;
   onReviewAdded?: () => void;
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   const [name, setName] = useState(currentUser?.displayName || "");
   const [reviewText, setReviewText] = useState("");
   const [rating, setRating] = useState(5);
   const [submitting, setSubmitting] = useState(false);
+  const [userAvatar, setUserAvatar] = useState<string>("");
+  const [avatarLoading, setAvatarLoading] = useState(true);
 
+  // Helper function to extract avatar from user data (handles multiple field names)
+  const extractAvatar = (data: any): string => {
+    return data?.profilePicture || data?.photoURL || data?.avatar || data?.image || "";
+  };
+
+  // Fetch user's profile picture - runs whenever modal opens or user changes
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = "";
-      };
+    if (!isOpen || !currentUser) {
+      setAvatarLoading(true);
+      setUserAvatar("");
+      return;
     }
-  }, [isOpen]);
+
+    setAvatarLoading(true);
+
+    // First try userProfile from AuthContext (check both photoURL and profilePicture)
+    const avatarFromContext = extractAvatar(userProfile);
+    if (avatarFromContext) {
+      setUserAvatar(avatarFromContext);
+      setAvatarLoading(false);
+      return;
+    }
+
+    // Fetch from Firestore directly
+    getDoc(doc(db, "users", currentUser.uid))
+      .then((snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          const avatar = extractAvatar(data);
+          setUserAvatar(avatar);
+        } else {
+          // Fallback to Firebase Auth photoURL
+          setUserAvatar(currentUser.photoURL || "");
+        }
+      })
+      .catch(() => {
+        // Fallback to Firebase Auth photoURL
+        setUserAvatar(currentUser.photoURL || "");
+      })
+      .finally(() => {
+        setAvatarLoading(false);
+      });
+
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen, currentUser, userProfile]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -501,11 +772,27 @@ const AddReviewModal = ({
     if (!name.trim() || !reviewText.trim() || !currentUser) return;
     setSubmitting(true);
     try {
+      // If we already have an avatar from state, use it; otherwise fetch it fresh
+      let finalAvatar = userAvatar || currentUser.photoURL || "";
+      
+      // If still no avatar, try to fetch directly from Firestore one more time
+      if (!finalAvatar) {
+        try {
+          const userSnap = await getDoc(doc(db, "users", currentUser.uid));
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            finalAvatar = userData.profilePicture || userData.photoURL || userData.avatar || userData.image || "";
+          }
+        } catch (fetchErr) {
+          console.warn("Failed to fetch user avatar during review submission:", fetchErr);
+        }
+      }
+
       await submitReview({
         serviceProviderId,
         reviewerId: currentUser.uid,
         reviewerName: name.trim(),
-        reviewerAvatar: currentUser.photoURL || "",
+        reviewerAvatar: finalAvatar,
         comment: reviewText.trim(),
         rating,
       });
@@ -602,6 +889,129 @@ const AddReviewModal = ({
           </span>
           <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700 rounded-2xl" />
         </button>
+      </div>
+    </div>
+  );
+};
+
+// ─── Booking Modal ─────────────────────────────────────────────────────────────
+
+const BookingModal = ({
+  isOpen,
+  onClose,
+  customerName,
+  setCustomerName,
+  address,
+  setAddress,
+  homeLocation,
+  setHomeLocation,
+  contact,
+  setContact,
+  dateTime,
+  setDateTime,
+  onSubmit,
+  submitting,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  customerName: string;
+  setCustomerName: (value: string) => void;
+  address: string;
+  setAddress: (value: string) => void;
+  homeLocation: string;
+  setHomeLocation: (value: string) => void;
+  contact: string;
+  setContact: (value: string) => void;
+  dateTime: string;
+  setDateTime: (value: string) => void;
+  onSubmit: () => void;
+  submitting: boolean;
+}) => {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = "";
+      };
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="relative z-10 w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 md:p-8">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 w-9 h-9 rounded-full border-2 border-[#0072D1] flex items-center justify-center text-[#0072D1] hover:bg-[#0072D1] hover:text-white transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        <div className="text-center mb-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-1">Book {customerName ? customerName : "Provider"}</h2>
+          <p className="text-sm text-gray-500">Please fill booking details</p>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Your Name</label>
+            <input
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              className="w-full border border-[#0072D1]/40 rounded-2xl px-4 py-2 text-sm bg-gray-50 focus:outline-none focus:border-[#0072D1]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Contact</label>
+            <input
+              value={contact}
+              onChange={(e) => setContact(e.target.value)}
+              className="w-full border border-[#0072D1]/40 rounded-2xl px-4 py-2 text-sm bg-gray-50 focus:outline-none focus:border-[#0072D1]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Address</label>
+            <input
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              className="w-full border border-[#0072D1]/40 rounded-2xl px-4 py-2 text-sm bg-gray-50 focus:outline-none focus:border-[#0072D1]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Home Location</label>
+            <input
+              value={homeLocation}
+              onChange={(e) => setHomeLocation(e.target.value)}
+              className="w-full border border-[#0072D1]/40 rounded-2xl px-4 py-2 text-sm bg-gray-50 focus:outline-none focus:border-[#0072D1]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Date & Time</label>
+            <input
+              type="datetime-local"
+              value={dateTime}
+              onChange={(e) => setDateTime(e.target.value)}
+              className="w-full border border-[#0072D1]/40 rounded-2xl px-4 py-2 text-sm bg-gray-50 focus:outline-none focus:border-[#0072D1]"
+            />
+          </div>
+
+          <button
+            onClick={onSubmit}
+            disabled={submitting}
+            className="w-full text-white bg-[#0072D1] px-4 py-2.5 rounded-2xl font-bold hover:bg-[#005baa] transition-colors disabled:opacity-50"
+          >
+            {submitting ? "Booking..." : "Confirm Booking"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -785,12 +1195,19 @@ const RatingSummary = ({
 
 const PublicProfile: React.FC = () => {
   const { serviceProviderId } = useParams<{ serviceProviderId: string }>();
-  const { currentUser } = useAuth();
+  const { currentUser, userRole, userProfile } = useAuth();
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<ProfileTab>("posts");
   const [page, setPage] = useState(1);
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [bookingCustomerName, setBookingCustomerName] = useState("");
+  const [bookingAddress, setBookingAddress] = useState("");
+  const [bookingHomeLocation, setBookingHomeLocation] = useState("");
+  const [bookingContact, setBookingContact] = useState("");
+  const [bookingDateTime, setBookingDateTime] = useState("");
+  const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [selectedPost, setSelectedPost] = useState<any>(null);
 
   const [coverSrc, setCoverSrc] = useState<string>(COVER_IMG);
@@ -811,6 +1228,13 @@ const PublicProfile: React.FC = () => {
   const [loadingReviews, setLoadingReviews] = useState(true);
   const [averageRating, setAverageRating] = useState(0);
 
+  // ── Edit Review Modal ─────────────────────────────────────────────────────
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingReview, setEditingReview] = useState<any>(null);
+  const [editText, setEditText] = useState("");
+  const [editRating, setEditRating] = useState(5);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
   // ── Fetch provider profile ─────────────────────────────────────────────────
 
   useEffect(() => {
@@ -820,7 +1244,8 @@ const PublicProfile: React.FC = () => {
     setProviderError(null);
     setProviderData(null);
 
-    fetchUserDoc(serviceProviderId)
+    // Use retry mechanism for more robust fetching
+    withRetry(() => fetchUserDoc(serviceProviderId))
       .then((data) => {
         if (!data) {
           setProviderError("Service provider not found.");
@@ -829,7 +1254,7 @@ const PublicProfile: React.FC = () => {
 
         setProviderData(data);
 
-        // FIX: use `profilePicture` (Firestore field) with `photoURL` as fallback
+        // FIX: use normalized `profilePicture` field with fallback to `photoURL`
         if (data.profilePicture) {
           setProfileImageSrc(data.profilePicture);
         } else if (data.photoURL) {
@@ -842,7 +1267,7 @@ const PublicProfile: React.FC = () => {
         }
       })
       .catch((err) => {
-        console.error("[PublicProfile] Provider fetch error:", err);
+        console.error("[PublicProfile] Provider fetch error after retries:", err);
         setProviderError("Failed to load provider profile. Please try again.");
       })
       .finally(() => setLoadingProvider(false));
@@ -884,6 +1309,60 @@ const PublicProfile: React.FC = () => {
       })
       .catch((err) => console.error("[PublicProfile] Reviews fetch error:", err))
       .finally(() => setLoadingReviews(false));
+  };
+
+  const resetBookingForm = () => {
+    setBookingCustomerName("");
+    setBookingAddress("");
+    setBookingHomeLocation("");
+    setBookingContact("");
+    setBookingDateTime("");
+  };
+
+  const handleSubmitBooking = async () => {
+    if (!serviceProviderId || !currentUser) return;
+    if (!bookingCustomerName.trim() || !bookingAddress.trim() || !bookingHomeLocation.trim() || !bookingContact.trim() || !bookingDateTime.trim()) {
+      alert("Please fill all booking fields.");
+      return;
+    }
+
+    const bookingTime = new Date(bookingDateTime);
+    if (isNaN(bookingTime.getTime())) {
+      alert("Please select a valid booking date and time.");
+      return;
+    }
+
+    setBookingSubmitting(true);
+
+    try {
+      const createdByRole = userRole === "admin" ? "admin" : "seeker";
+      const bookingId = await bookingService.createBooking({
+        customerId: currentUser.uid,
+        providerId: serviceProviderId,
+        customerName: bookingCustomerName,
+        customerContact: bookingContact,
+        address: bookingAddress,
+        homeLocation: bookingHomeLocation,
+        bookingDate: bookingTime,
+        createdByRole,
+      });
+
+      await notificationService.createBookingRequestNotification(
+        serviceProviderId,
+        bookingId,
+        bookingCustomerName,
+        bookingTime
+      );
+      alert("Booking request sent successfully.");
+      setShowBookingModal(false);
+      resetBookingForm();
+    } catch (err: any) {
+      console.error("Error creating booking", err);
+      const errorMsg = err?.message || "Unknown error";
+      alert(`Failed to create booking: ${errorMsg}`);
+    } finally {
+      setBookingSubmitting(false);
+    }
   };
 
   useEffect(() => {
@@ -987,30 +1466,74 @@ const PublicProfile: React.FC = () => {
     </>
   );
 
+  // ── Handle Edit Review ────────────────────────────────────────────────────
+  const handleEditReview = (review: any) => {
+    setEditingReview(review);
+    setEditText(review.comment || "");
+    setEditRating(review.rating || 5);
+    setShowEditModal(true);
+  };
+
+  // ── Handle Delete Review ──────────────────────────────────────────────────
+  const handleDeleteReview = async (reviewWithReason: any) => {
+    try {
+      await reviewService.deleteReview(
+        reviewWithReason.id,
+        currentUser!.uid,
+        userRole as "seeker" | "service_provider" | "admin"
+      );
+      // Remove from local state
+      setReviews(prev => prev.filter(r => r.id !== reviewWithReason.id));
+      // Recalculate average
+      const updatedReviews = reviews.filter(r => r.id !== reviewWithReason.id);
+      const avg = updatedReviews.length
+        ? updatedReviews.reduce((sum, r) => sum + (r.rating || 0), 0) / updatedReviews.length
+        : 0;
+      setAverageRating(avg);
+    } catch (err: any) {
+      console.error("Error deleting review:", err);
+      alert(err.message || "Failed to delete review.");
+    }
+  };
+
+  // ── Handle Submit Edit ────────────────────────────────────────────────────
+  const handleSubmitEdit = async () => {
+    if (!editText.trim() || !editingReview) return;
+    setEditSubmitting(true);
+    try {
+      await reviewService.updateReview(
+        editingReview.id,
+        currentUser!.uid,
+        userRole as "seeker" | "service_provider" | "admin",
+        { comment: editText.trim(), rating: editRating }
+      );
+      // Update local state
+      setReviews(prev => prev.map(r => 
+        r.id === editingReview.id 
+          ? { ...r, comment: editText.trim(), rating: editRating }
+          : r
+      ));
+      // Recalculate average
+      const avg = reviews.reduce((sum, r) => sum + (r.rating || 0), 0) / reviews.length;
+      setAverageRating(avg);
+      setShowEditModal(false);
+      setEditingReview(null);
+      setEditText("");
+      setEditRating(5);
+    } catch (err: any) {
+      console.error("Error updating review:", err);
+      alert(err.message || "Failed to update review.");
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
   const ReviewsContent = () => (
-    <>
-      <RatingSummary
-        averageRating={averageRating}
-        reviews={reviews}
-        onAddReview={() => setShowReviewModal(true)}
-      />
-      {loadingReviews ? (
-        <div className="flex justify-center py-12">
-          <Loader className="w-6 h-6 text-[#0072D1] animate-spin" />
-        </div>
-      ) : reviews.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="font-bold text-gray-600 mb-1">No reviews yet</p>
-          <p className="text-sm text-gray-400">Be the first to leave a review.</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {reviews.map((r) => (
-            <ReviewCard key={r.id} review={r} />
-          ))}
-        </div>
-      )}
-    </>
+    <ReviewsList
+      serviceProviderId={serviceProviderId || ""}
+      serviceProviderName={providerName}
+      onReviewAdded={loadReviews}
+    />
   );
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -1097,6 +1620,15 @@ const PublicProfile: React.FC = () => {
                 serviceProviderId={serviceProviderId || ''}
                 serviceProviderName={providerName}
               />
+              {userRole !== "service_provider" && (
+                <button
+                  onClick={() => setShowBookingModal(true)}
+                  className="relative overflow-hidden flex items-center gap-1.5 bg-green-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all duration-300 hover:bg-green-700 hover:scale-105 group"
+                >
+                  <span className="relative z-10">Book Now</span>
+                  <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                </button>
+              )}
               <AddReviewBtn />
             </div>
           </div>
@@ -1133,6 +1665,14 @@ const PublicProfile: React.FC = () => {
                   serviceProviderName={providerName}
                   size="sm"
                 />
+                {userRole !== "service_provider" && (
+                  <button
+                    onClick={() => setShowBookingModal(true)}
+                    className="text-xs px-3 py-2 rounded-lg bg-green-600 text-white font-bold hover:bg-green-700 transition-colors"
+                  >
+                    Book Now
+                  </button>
+                )}
                 <AddReviewBtn small />
               </div>
             </>
@@ -1180,6 +1720,106 @@ const PublicProfile: React.FC = () => {
           serviceProviderId={serviceProviderId}
           serviceProviderName={providerName}
           onReviewAdded={loadReviews}
+        />
+      )}
+
+      {/* Edit Review Modal */}
+      {showEditModal && editingReview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => {
+              setShowEditModal(false);
+              setEditingReview(null);
+              setEditText("");
+              setEditRating(5);
+            }}
+          />
+          <div className="relative z-10 w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 md:p-8">
+            <button
+              onClick={() => {
+                setShowEditModal(false);
+                setEditingReview(null);
+                setEditText("");
+                setEditRating(5);
+              }}
+              className="absolute top-4 right-4 w-9 h-9 rounded-full border-2 border-[#0072D1] flex items-center justify-center text-[#0072D1] hover:bg-[#0072D1] hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="text-center mb-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-1">Edit Review</h2>
+              <p className="text-sm text-gray-500">Update your review</p>
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Rating
+              </label>
+              <div className="flex gap-1 justify-center">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setEditRating(star)}
+                    className="focus:outline-none"
+                  >
+                    <Star
+                      className={`w-7 h-7 transition-colors ${
+                        editRating >= star
+                          ? "text-yellow-500 fill-yellow-500"
+                          : "text-gray-300"
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-7">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Your Review
+              </label>
+              <textarea
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                rows={4}
+                placeholder="Share your experience with this service provider…"
+                className="w-full border border-[#0072D1]/40 rounded-2xl px-4 py-3 text-sm text-gray-700 outline-none focus:border-[#0072D1] focus:ring-2 focus:ring-[#0072D1]/15 transition-colors bg-gray-50 resize-none"
+              />
+            </div>
+
+            <button
+              onClick={handleSubmitEdit}
+              disabled={editSubmitting || !editText.trim()}
+              className="relative overflow-hidden w-full bg-[#0072D1] text-white font-bold py-3.5 rounded-2xl text-sm transition-all duration-300 hover:bg-black hover:scale-[1.01] group shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="relative z-10">
+                {editSubmitting ? "Updating…" : "Update Review"}
+              </span>
+              <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700 rounded-2xl" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Booking Modal */}
+      {showBookingModal && serviceProviderId && (
+        <BookingModal
+          isOpen={showBookingModal}
+          onClose={() => setShowBookingModal(false)}
+          customerName={bookingCustomerName}
+          setCustomerName={setBookingCustomerName}
+          address={bookingAddress}
+          setAddress={setBookingAddress}
+          homeLocation={bookingHomeLocation}
+          setHomeLocation={setBookingHomeLocation}
+          contact={bookingContact}
+          setContact={setBookingContact}
+          dateTime={bookingDateTime}
+          setDateTime={setBookingDateTime}
+          onSubmit={handleSubmitBooking}
+          submitting={bookingSubmitting}
         />
       )}
     </div>

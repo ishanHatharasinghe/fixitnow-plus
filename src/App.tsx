@@ -18,8 +18,6 @@ import SetupYourLocationPage from "./Service Provider/SignUp/SetupYourLocationPa
 import VerifyYourIdPage from "./Service Provider/SignUp/VerifyYourIdPage";
 import SetupYourImagePage from "./Service Provider/SignUp/SetupYourImagePage";
 import SignupCompletePage from "./Service Provider/SignUp/SignupCompletePage";
-import TestPage from "./test/TestPage";
-import FunctionalityTest from "./test/FunctionalityTest";
 import Profile from "./Service Provider/Profile";
 import EditProfile from "./Service Provider/EditProfile";
 import AddPost from "./Service Provider/PostAdd";
@@ -27,6 +25,7 @@ import PublicProfile from "./Service Provider/PublicProfile";
 import AdminDashboard from "./Admin/AdminDashboard";
 import FAQ from "./Pages/FAQ";
 import PrivacyPolicy from "./Pages/PrivacyPolicy";
+import BookingsPage from "./Pages/BookingsPage";
 import Footer from "./Components/Footer";
 
 // Placeholder components for protected routes
@@ -41,7 +40,7 @@ function App() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowPreloader(false);
-    }, 3000);
+    }, 1000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -134,19 +133,7 @@ function App() {
               </ProtectedRoute>
             } />
 
-            {/* ── Test routes ───────────────────────────────────────────────── */}
 
-            <Route path="/test" element={
-              <ProtectedRoute requireAuth={false}>
-                <TestPage />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/test/functionality" element={
-              <ProtectedRoute>
-                <FunctionalityTest />
-              </ProtectedRoute>
-            } />
 
             {/* ── Role-based protected routes ───────────────────────────────── */}
 
@@ -171,6 +158,12 @@ function App() {
                 <RoleBasedRoute allowedRoles={['admin']}>
                   <AdminDashboard />
                 </RoleBasedRoute>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/bookings" element={
+              <ProtectedRoute>
+                <BookingsPage />
               </ProtectedRoute>
             } />
 

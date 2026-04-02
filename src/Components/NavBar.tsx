@@ -10,18 +10,24 @@ import {
   Shield,
   Bell,
   CheckCheck,
-  CheckCircle,
-  XCircle,
+  CircleCheck,
+  BadgeX,
   MessageSquare,
+  MessageSquareWarning,
+  CalendarCheck,
+  BookUp,
   X,
   Menu,
   ChevronRight,
   ChevronDown,
+  Calendar,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import MessagingUI from "./MessagingUI";
+import BookingCalendar from "./BookingCalendar";
 import { notificationService, type AppNotification } from "../services/notificationService";
 import { searchService, type SearchResult } from "../services/searchService";
+import { bookingService, type Booking } from "../services/bookingService";
 
 const Navbar: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -30,6 +36,8 @@ const Navbar: React.FC = () => {
   const [isMessagingOpen, setIsMessagingOpen] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [calendarBookings, setCalendarBookings] = useState<Booking[]>([]);
   const [showAllNotifications, setShowAllNotifications] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -72,6 +80,35 @@ const Navbar: React.FC = () => {
     }
   }, [isNotifOpen]);
 
+  // Subscribe to bookings when calendar is opened
+  useEffect(() => {
+    if (!isCalendarModalOpen || !currentUser?.uid) {
+      setCalendarBookings([]);
+      return;
+    }
+
+    // Get bookings for the current user (both as customer and provider)
+    let unsub: (() => void) | null = null;
+
+    if (userRole === "service_provider") {
+      // If service provider, show their incoming bookings
+      unsub = bookingService.subscribeToProviderBookings(
+        currentUser.uid,
+        (bookings) => setCalendarBookings(bookings)
+      );
+    } else {
+      // Otherwise show their bookings as customer
+      unsub = bookingService.subscribeToCustomerBookings(
+        currentUser.uid,
+        (bookings) => setCalendarBookings(bookings)
+      );
+    }
+
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [isCalendarModalOpen, currentUser?.uid, userRole]);
+
   const handleMarkAllRead = useCallback(async () => {
     if (!currentUser?.uid) return;
     try {
@@ -101,8 +138,13 @@ const Navbar: React.FC = () => {
         return;
       }
 
-      if (notif.type === "post_approved" || notif.type === "post_rejected") {
+      if (notif.type === "post_approved" || notif.type === "post_declined") {
         navigate("/profile");
+        return;
+      }
+
+      if (notif.type === "booking_approved" || notif.type === "booking_declined" || notif.type === "booking_request" || notif.type === "booking_cancelled") {
+        navigate("/bookings");
         return;
       }
 
@@ -475,26 +517,33 @@ const Navbar: React.FC = () => {
   };
 
   const getNotifIcon = (type: string) => {
-    if (type === "post_approved") return <CheckCircle className="w-4 h-4 text-green-600" />;
-    if (type === "new_message") return <MessageSquare className="w-4 h-4 text-blue-600" />;
-    return <XCircle className="w-4 h-4 text-red-500" />;
+    if (type === "post_approved") return <CircleCheck className="w-4 h-4 text-green-600" />;
+    if (type === "booking_approved") return <CalendarCheck className="w-4 h-4 text-green-600" />;
+    if (type === "booking_request") return <BookUp className="w-4 h-4 text-purple-600" />;
+    if (type === "new_message") return <MessageSquareWarning className="w-4 h-4 text-blue-600" />;
+    if (type === "post_declined" || type === "booking_declined") return <BadgeX className="w-4 h-4 text-red-500" />;
+    return <BadgeX className="w-4 h-4 text-red-500" />;
   };
 
   const getNotifIconBg = (type: string) => {
-    if (type === "post_approved") return "bg-green-100";
+    if (type === "post_approved" || type === "booking_approved") return "bg-green-100";
+    if (type === "booking_request") return "bg-purple-100";
     if (type === "new_message") return "bg-blue-100";
+    if (type === "post_declined" || type === "booking_declined") return "bg-red-100";
     return "bg-red-100";
   };
 
   const getNotifActionLabel = (type: string) => {
     if (type === "new_message") return "Open conversation";
-    if (type === "post_approved") return "View in profile";
-    if (type === "post_rejected" || type === "post_declined") return "View in profile";
+    if (type === "booking_request") return "View booking";
+    if (type === "post_approved" || type === "booking_approved") return "View details";
+    if (type === "post_declined" || type === "booking_declined") return "View details";
     return "View details";
   };
 
   const getNotifActionIcon = (type: string) => {
-    if (type === "new_message") return <MessageSquare className="w-3 h-3" />;
+    if (type === "new_message") return <MessageSquareWarning className="w-3 h-3" />;
+    if (type === "booking_request") return <BookUp className="w-3 h-3" />;
     return <ChevronRight className="w-3 h-3" />;
   };
 
@@ -605,7 +654,9 @@ const Navbar: React.FC = () => {
             className={`inline-flex items-center gap-1 text-[10px] font-bold whitespace-nowrap transition-colors ${
               notif.type === "new_message"
                 ? "text-blue-500 group-hover:text-blue-700"
-                : notif.type === "post_approved"
+                : notif.type === "booking_request"
+                ? "text-purple-500 group-hover:text-purple-700"
+                : notif.type === "post_approved" || notif.type === "booking_approved"
                 ? "text-green-500 group-hover:text-green-700"
                 : "text-red-400 group-hover:text-red-600"
             }`}
@@ -878,6 +929,19 @@ const Navbar: React.FC = () => {
                   <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
                 </button>
 
+                {currentUser && (
+                  <button
+                    className="relative overflow-hidden flex items-center gap-1.5 bg-[#0072D1] text-white px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition-all duration-300 hover:bg-[#005baa] hover:shadow-md hover:shadow-[#0072D1]/20 active:scale-95 group"
+                    onClick={() => navigate("/bookings")}
+                  >
+                    <Bell className="w-4 h-4" />
+                    <span className="relative z-10">Bookings</span>
+                    <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                  </button>
+                )}
+
+                
+
                 {(userRole === "service_provider" || userRole === "admin") && (
                   <button
                     className="relative overflow-hidden flex items-center gap-1.5 bg-[#0072D1] text-white px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition-all duration-300 hover:bg-[#005baa] hover:shadow-md hover:shadow-[#0072D1]/20 active:scale-95 group"
@@ -886,6 +950,16 @@ const Navbar: React.FC = () => {
                     <Plus className="w-4 h-4" />
                     <span className="relative z-10">Add Post</span>
                     <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                  </button>
+                )}
+
+                {currentUser && (
+                  <button
+                    onClick={() => setIsCalendarModalOpen(true)}
+                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-[#0072D1]/10 hover:text-[#0072D1] transition-all duration-200 active:scale-95 group"
+                    aria-label="Calendar"
+                  >
+                    <Calendar className="w-[18px] h-[18px] text-gray-500 group-hover:text-[#0072D1] transition-colors" />
                   </button>
                 )}
 
@@ -1316,6 +1390,33 @@ const Navbar: React.FC = () => {
             }}
           >
             {renderNotificationContent(true)}
+          </div>
+        </div>
+      )}
+
+      {/* Calendar Modal */}
+      {isCalendarModalOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => setIsCalendarModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white">
+              <h2 className="text-xl font-bold text-gray-900">Booking Calendar</h2>
+              <button
+                onClick={() => setIsCalendarModalOpen(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6">
+              <BookingCalendar bookings={calendarBookings} />
+            </div>
           </div>
         </div>
       )}
