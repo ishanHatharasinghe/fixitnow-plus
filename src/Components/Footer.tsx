@@ -305,7 +305,7 @@ const Footer = () => {
             </span>
             <span className="w-px h-4 bg-white/30" />
             <span className="text-white/40 text-xs">
-              © 2026 All rights reserved · Ishan Hatharasinghe
+              © 2025 All rights reserved · ishan hatharasinghe
             </span>
           </div>
 

@@ -1406,12 +1406,9 @@ const PublicProfile: React.FC = () => {
 
   // Get all services from both field names
   const allServices = providerData?.availableServices || providerData?.services || [];
-  
-  // Format services display - show first service + count if multiple
-  const servicesDisplay = allServices.length > 0
-    ? allServices.length === 1
-      ? allServices[0]
-      : `${allServices[0]}${allServices.length > 2 ? ` +${allServices.length - 1} more` : ` & ${allServices[1]}`}`
+  const primaryService = allServices.length > 0 ? allServices[0] : "Service Provider";
+  const servicesDisplay = allServices.length > 0 
+    ? allServices.slice(0, 2).join(", ") + (allServices.length > 2 ? ` +${allServices.length - 2} more` : "")
     : "Service Provider";
 
   const TABS: { key: ProfileTab; label: string }[] = [
@@ -1612,11 +1609,9 @@ const PublicProfile: React.FC = () => {
                 <h2 className="text-xl font-black text-gray-900">
                   {providerName}
                 </h2>
-                {servicesDisplay && servicesDisplay !== "Service Provider" && (
-                  <p className="text-base font-bold text-gray-600 mt-1">
-                    {servicesDisplay}
-                  </p>
-                )}
+                <p className="text-base font-bold text-gray-600 mt-1">
+                  {servicesDisplay}
+                </p>
               </>
             )}
           </div>
@@ -1681,13 +1676,10 @@ const PublicProfile: React.FC = () => {
             <>
               <h2 className="text-base font-black text-gray-900 text-center">
                 {providerName}
-                {servicesDisplay && servicesDisplay !== "Service Provider" && (
-                  <span className="font-normal text-gray-600">
-                    {" "}
-                    · {servicesDisplay}
-                  </span>
-                )}
               </h2>
+              <p className="text-sm font-bold text-gray-600 mt-1">
+                {servicesDisplay}
+              </p>
               <div className="flex gap-2 mt-2">
                 <BackBtn />
                 <MessageButton
