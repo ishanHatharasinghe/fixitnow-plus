@@ -15,11 +15,11 @@ const ShareYourAdd = () => {
     }
 
     // If user is logged in, check their role
-    if (userRole === "service_provider" || userRole === "admin") {
+    if (userRole === "service_provider" ) {
       navigate("/add-post");
     } else {
       // For seekers or unknown roles, show an alert or message
-      alert("Only service providers and administrators can create posts.");
+      alert("Only service providers can create posts.");
     }
   };
 
