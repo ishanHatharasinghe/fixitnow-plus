@@ -4,7 +4,7 @@ import { Search, SlidersHorizontal, ChevronDown, X } from "lucide-react";
 
 // Make sure these paths match your actual project structure
 import Img from "../assets/Backgrounds/Landingpage.webp";
-import man from "../assets/Landing Page/man.png";
+import man from "../assets/LandingPage/man.png";
 import Logo from "../assets/logo2.png";
 
 // Full list of services based on your dropdown image

@@ -170,20 +170,26 @@ const ChooseCity = () => {
       params.set("services", selectedServices.join(","));
     }
     
-    // Add selected location (city or province)
-    if (selectedCity) {
-      params.set("cities", selectedCity);
-    } else if (selectedProvince) {
-      params.set("provinces", selectedProvince);
+    // Combine map-selected locations with filter drawer locations
+    const allCities = [...new Set([
+      ...(selectedCity ? [selectedCity] : []),
+      ...filterDistricts
+    ])];
+    const allProvinces = [...new Set([
+      ...(selectedProvince ? [selectedProvince] : []),
+      ...filterProvinces
+    ])];
+    
+    // Add ALL locations - both cities and provinces can be sent together
+    // The BrowsePlace component will handle both
+    if (allCities.length > 0) {
+      params.set("cities", allCities.join(","));
+    }
+    if (allProvinces.length > 0) {
+      params.set("provinces", allProvinces.join(","));
     }
     
     // Add filter drawer values
-    if (filterProvinces.length > 0) {
-      params.set("provinces", filterProvinces.join(","));
-    }
-    if (filterDistricts.length > 0) {
-      params.set("cities", filterDistricts.join(","));
-    }
     if (priceMin !== "1500") {
       params.set("priceMin", priceMin);
     }

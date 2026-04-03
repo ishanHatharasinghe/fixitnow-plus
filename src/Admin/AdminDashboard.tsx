@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
   UserCheck,
   ClipboardList,
   CheckSquare,
+  CalendarCheck,
   ChevronDown,
   TrendingUp,
   Clock,
@@ -31,10 +33,12 @@ import {
 import { collection, getDocs, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import AdminPostManagement from "./AdminPostManagement";
+import { notificationService } from "../services/notificationService";
+import AdminBookingsOverview from "./AdminBookingsOverview";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Section = "overview" | "providers" | "customers" | "posts" | "approval";
+type Section = "overview" | "providers" | "customers" | "posts" | "approval" | "bookings";
 
 export interface Post {
   id: string;
@@ -798,9 +802,7 @@ const Overview = ({
               ].map((item, i) => <ActivityItem key={i} item={item} />)
             )}
           </div>
-          <button className="mt-4 w-full border border-gray-200 rounded-xl py-2.5 text-xs font-bold text-[#0072D1] hover:bg-blue-50 hover:border-[#0072D1] transition-all duration-200">
-            View All Logs
-          </button>
+          
         </div>
       </div>
     </div>
@@ -839,6 +841,7 @@ const UsersSection = ({
   statsCards: { label: string; value: string; sub: string; subColor: string }[];
   users: UserProfile[]; loading: boolean;
 }) => {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const filteredUsers = users
     .filter((u) => u.role === roleFilter)
@@ -911,14 +914,15 @@ const UsersSection = ({
             <table className="w-full whitespace-nowrap">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {["NAME", "ROLE", "EMAIL", "JOIN DATE", "ACTIONS"].map((h) => (
+                  {["NAME", "ROLE", "EMAIL", "JOIN DATE"].map((h) => (
                     <th key={h} className="text-left text-[10px] font-black text-gray-400 tracking-widest uppercase px-5 py-3">{h}</th>
                   ))}
+                  {roleFilter === "service_provider" && <th className="text-left text-[10px] font-black text-gray-400 tracking-widest uppercase px-5 py-3">ACTIONS</th>}
                 </tr>
               </thead>
               <tbody>
                 {filteredUsers.length === 0 ? (
-                  <tr><td colSpan={5} className="px-5 py-10 text-center text-sm text-gray-400 font-medium">No {roleFilter === "service_provider" ? "service providers" : "customers"} found.</td></tr>
+                  <tr><td colSpan={roleFilter === "service_provider" ? 5 : 4} className="px-5 py-10 text-center text-sm text-gray-400 font-medium">No {roleFilter === "service_provider" ? "service providers" : "customers"} found.</td></tr>
                 ) : (
                   filteredUsers.map((u, i) => {
                     const initials = u.displayName
@@ -944,12 +948,19 @@ const UsersSection = ({
                         </td>
                         <td className="px-5 py-4 text-sm text-gray-600">{u.email}</td>
                         <td className="px-5 py-4 text-sm text-gray-600 font-medium">{joinDate}</td>
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-2">
-                            <button className="w-8 h-8 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center hover:bg-blue-100 transition-colors"><Eye className="w-3.5 h-3.5" /></button>
-                            <button className="w-8 h-8 rounded-xl bg-gray-50 text-gray-400 flex items-center justify-center hover:bg-gray-100 transition-colors"><MoreVertical className="w-3.5 h-3.5" /></button>
-                          </div>
-                        </td>
+                        {roleFilter === "service_provider" && (
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => navigate(`/public-profile/${u.uid}`)}
+                                className="w-8 h-8 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center hover:bg-blue-100 transition-colors"
+                                title="View Profile"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
@@ -978,15 +989,17 @@ const UsersSection = ({
                         <p className="text-xs text-gray-400">{u.email}</p>
                       </div>
                     </div>
-                    <button className="w-7 h-7 rounded-lg bg-gray-50 text-gray-400 flex items-center justify-center"><MoreVertical className="w-3.5 h-3.5" /></button>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit ${u.role === "service_provider" ? "bg-blue-50 text-blue-600" : "bg-gray-100 text-gray-600"}`}>
-                      <span className={`w-1 h-1 rounded-full ${u.role === "service_provider" ? "bg-blue-500" : "bg-gray-400"}`} />
-                      {u.role === "service_provider" ? "Provider" : "Seeker"}
-                    </span>
-                    <p className="text-xs text-gray-500 font-medium">{joinDate}</p>
-                  </div>
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit ${u.role === "service_provider" ? "bg-blue-50 text-blue-600" : "bg-gray-100 text-gray-600"}`}>
+                        <span className={`w-1 h-1 rounded-full ${u.role === "service_provider" ? "bg-blue-500" : "bg-gray-400"}`} />
+                        {u.role === "service_provider" ? "Provider" : "Seeker"}
+                      </span>
+                      <p className="text-xs text-gray-500 font-medium">{joinDate}</p>
+                      {roleFilter === "service_provider" && (
+                        <button className="w-7 h-7 rounded-lg bg-gray-50 text-gray-400 flex items-center justify-center"><MoreVertical className="w-3.5 h-3.5" /></button>
+                      )}
+                    </div>
                 </div>
               );
             })
@@ -1135,7 +1148,7 @@ const PostsTable = ({
       <table className="w-full whitespace-nowrap">
         <thead>
           <tr className="border-b border-gray-100 bg-gray-50/50">
-            {["REQUEST ID", "SERVICE PROVIDER", "SERVICE TYPE", "DATE", "STATUS", "ACTIONS"].map((h) => (
+            {["REQUEST ID", "SERVICE PROVIDER", "SERVICE TYPE", "DATE", "STATUS"].map((h) => (
               <th key={h} className="text-left text-[10px] font-black text-gray-400 tracking-widest uppercase px-5 py-3">{h}</th>
             ))}
           </tr>
@@ -1163,15 +1176,6 @@ const PostsTable = ({
               </td>
               <td className="px-5 py-4 text-sm text-gray-500 font-medium">{toDateSafe(p.createdAt).toLocaleDateString()}</td>
               <td className="px-5 py-4"><Badge status={p.status.toUpperCase()} /></td>
-              <td className="px-5 py-4" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                <div className="flex items-center gap-1.5">
-                  {p.status === "pending" && (
-                    <button className="w-7 h-7 rounded-lg text-[#0072D1] border border-[#0072D1]/20 flex items-center justify-center hover:bg-blue-50 transition-colors"><CheckCircle className="w-3.5 h-3.5" /></button>
-                  )}
-                  <button className="w-7 h-7 rounded-lg text-gray-400 border border-gray-200 flex items-center justify-center hover:border-[#0072D1] hover:text-[#0072D1] transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
-                  <button className="w-7 h-7 rounded-lg text-gray-400 border border-gray-200 flex items-center justify-center hover:border-red-400 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
-                </div>
-              </td>
             </tr>
           ))}
         </tbody>
@@ -1190,13 +1194,8 @@ const PostsTable = ({
             </div>
             <span className="text-sm font-bold text-gray-900">{p.ownerName || "Service Provider"}</span>
           </div>
-          <div className="flex items-center justify-between mt-2 gap-2">
+          <div className="flex items-center justify-between mt-2">
             <span className="text-xs text-gray-400">{p.category} · {toDateSafe(p.createdAt).toLocaleDateString()}</span>
-            <div className="flex gap-2" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-              {p.status === "pending" && <button className="h-8 rounded-lg text-[#0072D1] bg-blue-50/50 border border-[#0072D1]/20 flex items-center justify-center px-3"><CheckCircle className="w-4 h-4" /></button>}
-              <button className="h-8 rounded-lg text-gray-500 border border-gray-200 flex items-center justify-center px-3"><Pencil className="w-4 h-4" /></button>
-              <button className="h-8 rounded-lg text-red-400 border border-gray-200 flex items-center justify-center px-3"><Trash2 className="w-4 h-4" /></button>
-            </div>
           </div>
           {clickableRows && <p className="text-[10px] text-[#0072D1] font-semibold mt-3 text-center bg-blue-50/50 py-1.5 rounded-lg">Tap card to review details →</p>}
         </div>
@@ -1294,32 +1293,83 @@ const Approval = ({ posts, onPostsChange }: { posts: Post[]; onPostsChange: () =
     if (!selectedId) return;
     try {
       setActionLoading(true);
+      
+      // Step 1: Update post status
       await updateDoc(doc(db, "posts", selectedId), {
         status: "approved",
         rejectionReason: "",
         updatedAt: serverTimestamp(),
       });
+      
+      // Step 2: Send approval notification to the post owner
+      if (selectedPost?.serviceProviderId) {
+        try {
+          await notificationService.createApprovedNotification(
+            selectedPost.serviceProviderId,
+            selectedId,
+            selectedPost.title
+          );
+          console.log(`✅ Approval notification sent to provider ${selectedPost.serviceProviderId} for post "${selectedPost.title}"`);
+        } catch (notifErr) {
+          console.error("❌ Failed to send approval notification:", notifErr);
+        }
+      } else {
+        console.warn("⚠️ Cannot send notification: serviceProviderId is missing from post");
+      }
+      
       alert("Post approved successfully!");
       setSelectedId(null);
       onPostsChange();
-    } catch { alert("Failed to approve post"); }
-    finally { setActionLoading(false); }
+    } catch (err) {
+      console.error("Error approving post:", err);
+      alert("Failed to approve post");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleRejectConfirm = async () => {
     if (!pendingRejectId || !rejectionReason.trim()) { alert("Please provide a rejection reason"); return; }
+    
+    // Capture post data BEFORE any state mutation
+    const targetPost = posts.find((p) => p.id === pendingRejectId);
+    
     try {
       setActionLoading(true);
+      
+      // Step 1: Update post status
       await updateDoc(doc(db, "posts", pendingRejectId), {
         status: "rejected",
-        rejectionReason,
+        rejectionReason: rejectionReason.trim(),
         updatedAt: serverTimestamp(),
       });
+      
+      // Step 2: Send rejection notification to the post owner
+      if (targetPost?.serviceProviderId) {
+        try {
+          await notificationService.createRejectedNotification(
+            targetPost.serviceProviderId,
+            pendingRejectId,
+            targetPost.title,
+            rejectionReason.trim()
+          );
+          console.log(`✅ Rejection notification sent to provider ${targetPost.serviceProviderId} for post "${targetPost.title}"`);
+        } catch (notifErr) {
+          console.error("❌ Failed to send rejection notification:", notifErr);
+        }
+      } else {
+        console.warn("⚠️ Cannot send notification: serviceProviderId is missing from post");
+      }
+      
       alert("Post rejected successfully!");
       setShowRejectModal(false); setRejectionReason(""); setPendingRejectId(null); setSelectedId(null);
       onPostsChange();
-    } catch { alert("Failed to reject post"); }
-    finally { setActionLoading(false); }
+    } catch (err) {
+      console.error("Error rejecting post:", err);
+      alert("Failed to reject post");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
@@ -1408,6 +1458,7 @@ const AdminDashboard: React.FC = () => {
     { key: "customers", label: "Customers",         icon: Users },
     { key: "posts",     label: "Post Management",   icon: ClipboardList },
     { key: "approval",  label: "Approval",          icon: CheckSquare, badge: pendingPosts },
+    { key: "bookings",  label: "Bookings", icon: CalendarCheck },
   ];
 
   const renderContent = () => {
@@ -1440,7 +1491,6 @@ const AdminDashboard: React.FC = () => {
             roleFilter="service_provider"
             users={users} loading={loading}
             statsCards={[
-              { label: "Pending Verifications", value: pendingPosts.toString(),                       sub: "Requiring action",          subColor: "text-orange-500" },
               { label: "Active Providers",       value: totalProviders.toString(),                     sub: `+${Math.floor(totalProviders * 0.12)} this month`, subColor: "text-green-500" },
               { label: "Verified Providers",     value: Math.floor(totalProviders * 0.95).toString(), sub: "+5.1%",                     subColor: "text-green-500" },
               { label: "Approved Posts",         value: approvedPosts.toString(),                      sub: "Live on platform",          subColor: "text-gray-400" },
@@ -1466,6 +1516,8 @@ const AdminDashboard: React.FC = () => {
         return <PostManagement posts={posts} />;
       case "approval":
         return <Approval posts={posts} onPostsChange={loadData} />;
+      case "bookings":
+        return <AdminBookingsOverview />;
     }
   };
 

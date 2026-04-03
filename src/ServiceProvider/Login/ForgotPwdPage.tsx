@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Mail, ArrowLeft } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Mail, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../firebase";
 import { useNavigate } from "react-router-dom";
@@ -10,7 +10,46 @@ const ForgotPwdPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [emailError, setEmailError] = useState('');
   const navigate = useNavigate();
+
+  // Email validation regex
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  // Auto-navigate to login after success (8 seconds)
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (message) {
+      timer = setTimeout(() => {
+        navigate('/welcomeback');
+      }, 8000);
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [message, navigate]);
+
+  const validateEmail = (value: string): boolean => {
+    if (!value.trim()) {
+      setEmailError('Email address is required');
+      return false;
+    }
+    if (!emailRegex.test(value)) {
+      setEmailError('Please enter a valid email address');
+      return false;
+    }
+    setEmailError('');
+    return true;
+  };
+
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setEmail(value);
+    // Clear email error when user types
+    if (emailError) {
+      setEmailError('');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,26 +57,43 @@ const ForgotPwdPage: React.FC = () => {
     setMessage('');
     setError('');
 
-    if (!email) {
-      setError('Please enter your email address');
+    // Validate email format
+    if (!validateEmail(email)) {
       setLoading(false);
       return;
     }
 
     try {
-      await sendPasswordResetEmail(auth, email);
-      setMessage('Password reset email sent! Please check your inbox.');
+      await sendPasswordResetEmail(auth, email.trim());
+      setMessage('Password reset email sent successfully! Please check your inbox.');
       setEmail('');
+      // Note: We don't reveal whether the email exists or not for security reasons
+      // Firebase will not return an error if the email doesn't exist (for security)
     } catch (err: any) {
       console.error('Password reset error:', err);
-      if (err.code === 'auth/user-not-found') {
-        setError('No account found with this email address.');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('Please enter a valid email address.');
-      } else if (err.code === 'auth/missing-email') {
-        setError('Please enter your email address.');
-      } else {
-        setError('Failed to send password reset email. Please try again.');
+      
+      // Handle specific Firebase error codes
+      switch (err.code) {
+        case 'auth/invalid-email':
+          setError('The email address is not valid. Please check and try again.');
+          break;
+        case 'auth/user-not-found':
+          // For security, we show a generic message even if user is not found
+          // This prevents email enumeration attacks
+          setMessage('If an account exists with this email, you will receive a password reset link.');
+          break;
+        case 'auth/too-many-requests':
+          setError('Too many attempts. Please try again later or contact support.');
+          break;
+        case 'auth/network-request-failed':
+          setError('Network error. Please check your internet connection and try again.');
+          break;
+        case 'auth/internal-error':
+          setError('An internal error occurred. Please try again later.');
+          break;
+        default:
+          setError('Failed to send password reset email. Please try again.');
+          break;
       }
     } finally {
       setLoading(false);
@@ -81,16 +137,17 @@ const ForgotPwdPage: React.FC = () => {
 
             {/* Success Message */}
             {message && (
-              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-green-800 font-medium">{message}</p>
-                    <p className="text-green-600 text-sm mt-1">Didn't receive the email? Check your spam folder or try again.</p>
+              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg animate-fadeInUp">
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-green-800 font-semibold">{message}</p>
+                    <p className="text-green-600 text-sm mt-2">
+                      Didn't receive the email? Check your spam folder or try again.
+                    </p>
+                    <p className="text-green-600 text-sm mt-1">
+                      Redirecting to login in <span className="font-semibold">8 seconds</span>...
+                    </p>
                   </div>
                 </div>
               </div>
@@ -98,14 +155,12 @@ const ForgotPwdPage: React.FC = () => {
 
             {/* Error Message */}
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-                    <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg animate-fadeInUp">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-red-800 font-semibold">{error}</p>
                   </div>
-                  <p className="text-red-800 font-medium">{error}</p>
                 </div>
               </div>
             )}
@@ -122,12 +177,23 @@ const ForgotPwdPage: React.FC = () => {
                   <input
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-12 sm:pl-14 pr-4 sm:pr-6 py-3 sm:py-4 rounded-2xl bg-gray-50/80 backdrop-blur-sm border-2 border-[#0072D1]/30 focus:border-[#3ABBD0] focus:outline-none focus:ring-4 focus:ring-[#3ABBD0]/20 transition-all duration-300 group-hover:border-[#3ABBD0]/50"
+                    onChange={handleEmailChange}
+                    className={`w-full pl-12 sm:pl-14 pr-4 sm:pr-6 py-3 sm:py-4 rounded-2xl bg-gray-50/80 backdrop-blur-sm border-2 focus:outline-none focus:ring-4 transition-all duration-300 group-hover:border-[#3ABBD0]/50 ${
+                      emailError 
+                        ? 'border-red-300 focus:border-red-500 focus:ring-red-200' 
+                        : 'border-[#0072D1]/30 focus:border-[#3ABBD0] focus:ring-[#3ABBD0]/20'
+                    }`}
                     placeholder="Enter your email address"
                     required
+                    disabled={loading || !!message}
                   />
                 </div>
+                {emailError && (
+                  <p className="text-red-600 text-sm mt-2 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    {emailError}
+                  </p>
+                )}
                 <p className="text-xs text-gray-600 mt-2">
                   We'll send a password reset link to this email address
                 </p>
@@ -136,8 +202,8 @@ const ForgotPwdPage: React.FC = () => {
               {/* Reset Button */}
               <button
                 type="submit"
-                disabled={loading}
-                className="relative overflow-hidden w-full bg-[#0072D1] hover:bg-[#000000] text-white py-3 sm:py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg group mb-6 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={loading || !!message}
+                className="relative overflow-hidden w-full bg-[#0072D1] hover:bg-[#000000] text-white py-3 sm:py-4 rounded-2xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg group mb-6 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none"
               >
                 <span className="relative z-10">
                   {loading ? (
@@ -168,8 +234,6 @@ const ForgotPwdPage: React.FC = () => {
             <div className="flex justify-center gap-2 mt-8">
               <span className="w-2 h-2 rounded-full bg-gray-300"></span>
               <span className="w-2 h-2 rounded-full bg-gray-700"></span>
-              <span className="w-2 h-2 rounded-full bg-gray-300"></span>
-              <span className="w-2 h-2 rounded-full bg-gray-300"></span>
             </div>
           </div>
         </div>

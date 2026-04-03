@@ -493,17 +493,9 @@ const Navbar: React.FC = () => {
         baseLink.logout,
       ],
       admin: [
-        {
-          label: "Profile",
-          icon: User,
-          path: "/profile",
-        },
+        
         baseLink.findService,
-        {
-          label: "Add Post",
-          icon: Plus,
-          path: "/add-post",
-        },
+        
         {
           label: "Admin Dashboard",
           icon: Shield,

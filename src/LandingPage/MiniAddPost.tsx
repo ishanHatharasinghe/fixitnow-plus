@@ -1,7 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import Human from "../assets/Mini Share Add/human image.png";
+import Human from "../assets/MiniShareAdd/human image.png";
 
 const ShareYourAdd = () => {
   const navigate = useNavigate();

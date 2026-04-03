@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { ChevronDown, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSignup } from "../../contexts/SignupContext";
 import categoriesBackground from "../../assets/Backgrounds/Signupscreens.jpg";
@@ -7,7 +7,6 @@ import categoriesBackground from "../../assets/Backgrounds/Signupscreens.jpg";
 interface AccountFormData {
   username: string;
   description: string;
-  serviceType: string;
   phone: string;
 }
 
@@ -18,15 +17,21 @@ const SetupYourAccountPage = () => {
   const [localData, setLocalData] = useState<AccountFormData>({
     username: serviceProviderData.firstName || "",
     description: serviceProviderData.lastName || "",
-    serviceType: serviceProviderData.services?.[0] || "",
     phone: serviceProviderData.phoneNumber || ""
   });
 
+  // Multi-select services state
+  const [selectedServices, setSelectedServices] = useState<string[]>(
+    serviceProviderData.services || []
+  );
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   const [errors, setErrors] = useState<
-    Partial<Record<keyof AccountFormData, string>>
+    Partial<Record<keyof AccountFormData | 'serviceType', string>>
   >({});
   const [touched, setTouched] = useState<
-    Partial<Record<keyof AccountFormData, boolean>>
+    Partial<Record<keyof AccountFormData | 'serviceType', boolean>>
   >({});
   const [loading, setLoading] = useState(false);
 
@@ -52,8 +57,33 @@ const SetupYourAccountPage = () => {
     "Interlock & Driveway Paving"
   ];
 
-  const validate = () => {
-    let newErrors: Partial<Record<keyof AccountFormData, string>> = {};
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    if (isDropdownOpen) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [isDropdownOpen]);
+
+  // Toggle service selection
+  const toggleService = (service: string) => {
+    setSelectedServices((prev) =>
+      prev.includes(service)
+        ? prev.filter((s) => s !== service)
+        : [...prev, service]
+    );
+  };
+
+  // Remove service from tags
+  const removeService = (service: string) => {
+    setSelectedServices((prev) => prev.filter((s) => s !== service));
+  };
+
+  const validate = (): Partial<Record<keyof AccountFormData | 'serviceType', string>> => {
+    let newErrors: Partial<Record<keyof AccountFormData | 'serviceType', string>> = {};
 
     if (!localData.username.trim()) {
       newErrors.username = "Username is required";
@@ -66,8 +96,9 @@ const SetupYourAccountPage = () => {
       newErrors.description = "Please provide a short description";
     }
 
-    if (!localData.serviceType) {
-      newErrors.serviceType = "Please select a service type";
+    // Validate at least one service is selected
+    if (selectedServices.length === 0) {
+      newErrors.serviceType = "Please select at least one service";
     }
 
     // Sri Lankan phone validation (usually 9 digits after the country code)
@@ -84,7 +115,7 @@ const SetupYourAccountPage = () => {
 
   const handleChange = (
     e: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+      HTMLInputElement | HTMLTextAreaElement
     >
   ) => {
     const { name, value } = e.target;
@@ -96,7 +127,7 @@ const SetupYourAccountPage = () => {
 
   const handleBlur = (
     e: React.FocusEvent<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+      HTMLInputElement | HTMLTextAreaElement
     >
   ) => {
     const { name } = e.target;
@@ -118,7 +149,12 @@ const SetupYourAccountPage = () => {
     );
     setTouched(allTouched);
 
-    if (Object.keys(validationErrors).length === 0) {
+    // Also mark service as touched if empty
+    if (selectedServices.length === 0) {
+      setErrors(prev => ({ ...prev, serviceType: "Please select at least one service" }));
+    }
+
+    if (Object.keys(validationErrors).length === 0 && selectedServices.length > 0) {
       setLoading(true);
       
       // Save data to context and navigate to next step
@@ -126,7 +162,7 @@ const SetupYourAccountPage = () => {
         firstName: localData.username,
         lastName: localData.description,
         phoneNumber: localData.phone,
-        services: [localData.serviceType]
+        services: selectedServices
       });
       
       // Navigate to next step
@@ -146,6 +182,13 @@ const SetupYourAccountPage = () => {
         : "border-[#0072D1]/30 focus:border-[#0072D1]")
     );
   };
+
+  const selectedCount = selectedServices.length;
+  const serviceLabel = selectedCount === 0
+    ? "Select services..."
+    : selectedCount === 1
+    ? selectedServices[0]
+    : `${selectedCount} services selected`;
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -204,39 +247,103 @@ const SetupYourAccountPage = () => {
               )}
             </div>
 
-            {/* Service list Dropdown */}
-            <div className="mb-4">
+            {/* Multi-Select Service Dropdown */}
+            <div className="mb-4" ref={dropdownRef}>
               <label className="text-sm font-bold">
-                What Service You Provide
+                What Services You Provide
               </label>
+
+              {/* Selected Services Tags */}
+              {selectedCount > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {selectedServices.map((service) => (
+                    <span
+                      key={service}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0072D1]/10 text-[#0072D1] text-sm font-semibold rounded-full"
+                    >
+                      {service}
+                      <button
+                        type="button"
+                        onClick={() => removeService(service)}
+                        className="flex items-center justify-center w-4 h-4 rounded-full bg-[#0072D1]/20 hover:bg-[#0072D1] hover:text-white transition-colors"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              
+              {/* Dropdown Trigger */}
               <div className="relative mt-2">
-                <select
-                  name="serviceType"
-                  value={localData.serviceType}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  className={`w-full p-4 pr-12 rounded-2xl bg-[#F8FAFC] border-2 transition-all cursor-pointer appearance-none text-gray-700 focus:outline-none ${
-                    errors.serviceType && touched.serviceType
+                <button
+                  type="button"
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className={`w-full flex items-center justify-between px-4 py-4 pr-12 rounded-2xl bg-[#F8FAFC] border-2 transition-all text-left ${
+                    errors.serviceType && selectedCount === 0
                       ? "border-red-500"
-                      : "border-[#0072D1]/30 focus:border-[#0072D1]"
+                      : isDropdownOpen
+                      ? "border-[#0072D1] ring-2 ring-[#0072D1]/10"
+                      : "border-[#0072D1]/30 hover:border-[#0072D1]"
                   }`}
                 >
-                  <option value="" disabled hidden>
-                    Select Option
-                  </option>
-                  {serviceOptions.map((service, index) => (
-                    <option key={index} value={service}>
-                      {service}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none w-5 h-5" />
+                  <span className={`text-sm ${selectedCount > 0 ? "text-gray-700 font-semibold" : "text-gray-500"}`}>
+                    {isDropdownOpen 
+                      ? "Click to close" 
+                      : selectedCount === 0 
+                        ? "Select services..." 
+                        : "Click to add more services"}
+                  </span>
+                  <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {/* Dropdown Menu */}
+                {isDropdownOpen && (
+                  <div className="absolute z-50 w-full mt-2 max-h-64 overflow-y-auto bg-white border-2 border-[#0072D1]/30 rounded-2xl shadow-lg">
+                    <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-3">
+                      <span className="text-xs font-semibold text-gray-500">
+                        {selectedCount} service{selectedCount !== 1 ? "s" : ""} selected
+                      </span>
+                    </div>
+                    <div className="p-2">
+                      {serviceOptions.map((service) => {
+                        const isSelected = selectedServices.includes(service);
+                        return (
+                          <label
+                            key={service}
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
+                              isSelected 
+                                ? "bg-[#0072D1]/10 hover:bg-[#0072D1]/15" 
+                                : "hover:bg-gray-50"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleService(service)}
+                              className="w-4 h-4 rounded border-gray-300 text-[#0072D1] focus:ring-[#0072D1]"
+                            />
+                            <span className={`text-sm ${isSelected ? "font-semibold text-[#0072D1]" : "text-gray-700"}`}>
+                              {service}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-              {errors.serviceType && touched.serviceType && (
+
+              {errors.serviceType && (
                 <p className="text-red-500 text-xs mt-1 ml-1">
                   {errors.serviceType}
                 </p>
               )}
+
+              {/* Helper Text */}
+              <p className="text-[10px] text-gray-400 mt-1">
+                Select all services you provide. You can choose multiple.
+              </p>
             </div>
 
             {/* Phone */}
@@ -303,12 +410,10 @@ const SetupYourAccountPage = () => {
               </button>
             </div>
 
-            {/* Back Link */}
+            {/* Back to login */}
             <div className="text-center mt-6">
-              <button
-                type="button"
-                className="text-[#000000] font-semibold hover:text-[#0072D1]"
-              >
+              <button className="text-[#000000] font-semibold hover:text-[#0072D1]"
+              onClick={() => navigate('/getstarted')}>
                 ← Back to SignUp
               </button>
             </div>

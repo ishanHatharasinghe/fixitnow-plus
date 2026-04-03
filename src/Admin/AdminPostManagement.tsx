@@ -283,8 +283,11 @@ const AdminPostManagement: React.FC = () => {
 
     try {
       setProcessing(true);
+      
+      // Step 1: Update post status
       await postService.approvePost(postId);
-
+      
+      // Step 2: Log admin action (this also updates the post, but that's okay)
       if (currentUser) {
         await adminService.approvePost(
           postId,
@@ -293,13 +296,13 @@ const AdminPostManagement: React.FC = () => {
         );
       }
 
-      // Optimistic update
+      // Step 3: Update UI optimistically
       const update = (p: PostRow) =>
         p.id === postId ? { ...p, status: "approved" as PostStatus, rejectionReason: "" } : p;
       setPosts(prev => prev.map(update));
       setSelectedPost(prev => prev ? update(prev) : null);
 
-      // ── Send approval notification to the post owner ──────────────────────
+      // Step 4: Send approval notification to the post owner
       if (targetPost?.serviceProviderId) {
         try {
           await notificationService.createApprovedNotification(
@@ -307,10 +310,13 @@ const AdminPostManagement: React.FC = () => {
             postId,
             targetPost.title
           );
+          console.log(`✅ Approval notification sent to provider ${targetPost.serviceProviderId} for post "${targetPost.title}"`);
         } catch (notifErr) {
           // Non-critical — log but never block the admin action
-          console.error("Failed to send approval notification:", notifErr);
+          console.error("❌ Failed to send approval notification:", notifErr);
         }
+      } else {
+        console.warn("⚠️ Cannot send notification: serviceProviderId is missing from post");
       }
 
     } catch (err) {
@@ -354,7 +360,7 @@ const AdminPostManagement: React.FC = () => {
       setPosts(prev => prev.map(update));
       setSelectedPost(prev => prev ? update(prev) : null);
 
-      // ── Send rejection notification to the post owner ─────────────────────
+      // Step 4: Send rejection notification to the post owner
       if (targetPost?.serviceProviderId) {
         try {
           await notificationService.createRejectedNotification(
@@ -363,10 +369,13 @@ const AdminPostManagement: React.FC = () => {
             targetPost.title,
             reason.trim()
           );
+          console.log(`✅ Rejection notification sent to provider ${targetPost.serviceProviderId} for post "${targetPost.title}"`);
         } catch (notifErr) {
           // Non-critical — log but never block the admin action
-          console.error("Failed to send rejection notification:", notifErr);
+          console.error("❌ Failed to send rejection notification:", notifErr);
         }
+      } else {
+        console.warn("⚠️ Cannot send notification: serviceProviderId is missing from post");
       }
 
     } catch (err) {

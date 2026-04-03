@@ -3,12 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { Search, ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
 
 // Images
-import MainImage from "../assets/About Section/mainimg.webp";
-import Image1 from "../assets/About Section/img1.webp";
-import Image2 from "../assets/About Section/img2.webp";
-import Image3 from "../assets/About Section/img3.webp";
-import Image4 from "../assets/About Section/img4.webp";
-import Image5 from "../assets/About Section/mainimg.webp";
+import MainImage from "../assets/AboutSection/mainimg.webp";
+import Image1 from "../assets/AboutSection/img1.webp";
+import Image2 from "../assets/AboutSection/img2.webp";
+import Image3 from "../assets/AboutSection/img3.webp";
+import Image4 from "../assets/AboutSection/img4.webp";
+import Image5 from "../assets/AboutSection/mainimg.webp";
 
 const cardsData = [
   {

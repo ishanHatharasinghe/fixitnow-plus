@@ -166,7 +166,7 @@ const WelcomeBackPage = () => {
               <button 
                 type="button"
                 onClick={() => navigate('/getstarted')}
-                className="text-[#0072D1] font-semibold transition-colors duration-300 hover:text-[#005bb5]"
+                className="text-[#0072D1] font-semibold hover:underline transition-colors duration-300"
               >
                 Sign Up
               </button>
@@ -175,8 +175,6 @@ const WelcomeBackPage = () => {
             {/* Pagination Dots */}
             <div className="flex justify-center gap-2 mt-5">
               <span className="w-2 h-2 rounded-full bg-gray-700"></span>
-              <span className="w-2 h-2 rounded-full bg-gray-300"></span>
-              <span className="w-2 h-2 rounded-full bg-gray-300"></span>
               <span className="w-2 h-2 rounded-full bg-gray-300"></span>
             </div>
           </div>

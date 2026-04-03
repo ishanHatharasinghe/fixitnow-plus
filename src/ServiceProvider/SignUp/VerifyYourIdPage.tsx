@@ -309,7 +309,8 @@ const VerifyYourIdPage = () => {
 
             {/* Back to login */}
             <div className="text-center mt-6">
-              <button className="text-[#000000] font-semibold hover:text-[#0072D1]">
+              <button className="text-[#000000] font-semibold hover:text-[#0072D1]"
+              onClick={() => navigate('/getstarted')}>
                 ← Back to SignUp
               </button>
             </div>

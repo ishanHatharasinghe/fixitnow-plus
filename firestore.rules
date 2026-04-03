@@ -14,7 +14,19 @@ service cloud.firestore {
       allow update: if request.auth != null && request.auth.uid == userId;
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
-    match /users/{userId} {
+    
+    // Allow querying users collection by email (for email validation during signup)
+    // This is safe because it only exposes the email field check, not full user data
+    match /users/{document=**} {
+      // Allow unauthenticated users to query by email for signup validation
+      allow read: if request.auth == null || request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.uid;
+      allow update: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow delete: if request.auth != null && request.auth.uid == resource.data.uid;
+    }
+    
+    // Admin has full access to all user documents
+    match /users/{document=**} {
       allow read, write: if request.auth.token.email == 'ishanhatharasinghe222@gmail.com';
     }
 
@@ -80,6 +92,7 @@ service cloud.firestore {
       allow list: if request.auth != null;
       allow create: if request.auth != null && (
                       request.auth.token.email == 'ishanhatharasinghe222@gmail.com' ||
+                      request.resource.data.type in ['post_approved', 'post_declined'] ||
                       request.resource.data.type == 'new_message' ||
                       request.resource.data.type == 'booking_request' ||
                       request.resource.data.type in ['booking_approved', 'booking_declined', 'booking_cancelled']

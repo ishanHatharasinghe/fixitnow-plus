@@ -678,12 +678,12 @@ const SetupYourLocationPage = () => {
               </button>
             </div>
 
-            {/* Back Button */}
+            {/* Back to login */}
             <div className="text-center mt-6">
-              <button
+              <button 
                 type="button"
-                className="text-black font-semibold hover:text-[#0072D1]"
-              >
+                onClick={() => navigate('/getstarted')}
+                className="text-[#000000] font-semibold hover:text-[#0072D1] transition-colors duration-300">
                 ← Back to SignUp
               </button>
             </div>

@@ -474,8 +474,8 @@ const AboutPanel = ({ providerData, loading, error }: { providerData: any; loadi
         <List className="w-5 h-5 text-gray-400" />
       </div>
       <div className="flex flex-wrap gap-2">
-        {providerData?.availableServices && providerData.availableServices.length > 0 ? (
-          providerData.availableServices.map((service: string, index: number) => (
+        {(providerData?.availableServices?.length > 0 || providerData?.services?.length > 0) ? (
+          (providerData.availableServices || providerData.services || []).map((service: string, index: number) => (
             <span key={index} className="px-2 py-1 bg-[#0072D1]/10 text-[#0072D1] text-xs rounded-full">
               {service}
             </span>
@@ -496,7 +496,16 @@ const AboutPanel = ({ providerData, loading, error }: { providerData: any; loadi
       </div>
     </div>
     <p className="text-xs font-bold text-gray-600 px-1">
-      Member since : {providerData?.createdAt ? new Date(providerData.createdAt).toLocaleDateString() : 'December 28, 2018'}
+      Member since : {providerData?.createdAt ? (() => {
+        try {
+          const date = providerData.createdAt?.toDate?.() || 
+                      (providerData.createdAt?.seconds ? new Date(providerData.createdAt.seconds * 1000) : null) ||
+                      new Date(providerData.createdAt);
+          return isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString();
+        } catch {
+          return 'N/A';
+        }
+      })() : 'N/A'}
     </p>
   </div>
 );
@@ -888,9 +897,25 @@ const UserProfile: React.FC = () => {
                 <h2 className="text-xl font-black text-gray-900">
                   {providerData?.firstName || 'Full Name'} {providerData?.lastName || ''}
                 </h2>
-                <p className="text-lg font-black text-gray-900">
-                  {providerData?.availableServices?.[0] || 'Plumber'}
-                </p>
+                <div className="flex flex-wrap gap-1 justify-center">
+                  {(providerData?.availableServices || providerData?.services || []).length > 0 ? (
+                    <>
+                      {(providerData?.availableServices || providerData?.services || []).slice(0, 2).map((service: string, index: number, arr: string[]) => (
+                        <span key={index} className="text-lg font-black text-gray-900">
+                          {service}
+                          {index < arr.length - 1 && index < 1 ? ', ' : ''}
+                        </span>
+                      ))}
+                      {(providerData?.availableServices || providerData?.services || []).length > 2 && (
+                        <span className="text-lg font-black text-gray-500">
+                          {' '}+{(providerData?.availableServices || providerData?.services || []).length - 2} more
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-lg font-black text-gray-900">Service Provider</p>
+                  )}
+                </div>
               </>
             )}
           </div>

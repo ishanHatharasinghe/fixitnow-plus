@@ -7,21 +7,22 @@ import ProtectedRoute from "./Components/ProtectedRoute";
 import RoleBasedRoute from "./Components/RoleBasedRoute";
 import NavBar from "./Components/NavBar";
 import PreLoader from "./Components/PreLoader";
-import LandingPage from "./Landing Page/LandingPage";
+import LandingPage from "./LandingPage/LandingPage";
 import BrowsePage from "./Pages/BrowsePlace";
-import SelectRole from "./Main Login Screens/SelectRole";
-import HaveAccount from "./Main Login Screens/HaveAccount";
-import WelcomeBackPage from "./Service Provider/Login/WelcomeBackPage";
-import GetStartedPage from "./Service Provider/SignUp/GetStartedPage";
-import SetupYourAccountPage from "./Service Provider/SignUp/SetupYourAccountPage";
-import SetupYourLocationPage from "./Service Provider/SignUp/SetupYourLocationPage";
-import VerifyYourIdPage from "./Service Provider/SignUp/VerifyYourIdPage";
-import SetupYourImagePage from "./Service Provider/SignUp/SetupYourImagePage";
-import SignupCompletePage from "./Service Provider/SignUp/SignupCompletePage";
-import Profile from "./Service Provider/Profile";
-import EditProfile from "./Service Provider/EditProfile";
-import AddPost from "./Service Provider/PostAdd";
-import PublicProfile from "./Service Provider/PublicProfile";
+import SelectRole from "./MainLoginScreens/SelectRole";
+import HaveAccount from "./MainLoginScreens/HaveAccount";
+import WelcomeBackPage from "./ServiceProvider/Login/WelcomeBackPage";
+import ForgotPwdPage from "./ServiceProvider/Login/ForgotPwdPage";
+import GetStartedPage from "./ServiceProvider/SignUp/GetStartedPage";
+import SetupYourAccountPage from "./ServiceProvider/SignUp/SetupYourAccountPage";
+import SetupYourLocationPage from "./ServiceProvider/SignUp/SetupYourLocationPage";
+import VerifyYourIdPage from "./ServiceProvider/SignUp/VerifyYourIdPage";
+import SetupYourImagePage from "./ServiceProvider/SignUp/SetupYourImagePage";
+import SignupCompletePage from "./ServiceProvider/SignUp/SignupCompletePage";
+import Profile from "./ServiceProvider/Profile";
+import EditProfile from "./ServiceProvider/EditProfile";
+import AddPost from "./ServiceProvider/PostAdd";
+import PublicProfile from "./ServiceProvider/PublicProfile";
 import AdminDashboard from "./Admin/AdminDashboard";
 import FAQ from "./Pages/FAQ";
 import PrivacyPolicy from "./Pages/PrivacyPolicy";
@@ -86,6 +87,12 @@ function App() {
             <Route path="/welcomeback" element={
               <ProtectedRoute requireAuth={false}>
                 <WelcomeBackPage />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/forgot-password" element={
+              <ProtectedRoute requireAuth={false}>
+                <ForgotPwdPage />
               </ProtectedRoute>
             } />
 

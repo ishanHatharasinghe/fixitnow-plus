@@ -13,7 +13,7 @@ import {
   List
 } from "lucide-react";
 
-import SampleImg from "../assets/About Section/img1.webp";
+import SampleImg from "../assets/AboutSection/img1.webp";
 import { postService } from "../services/postService";
 import ReviewModal from "../Components/ReviewModal";
 
@@ -613,10 +613,12 @@ const BrowsePlace = () => {
       setCitySearch(qParam);
     }
 
+    // Handle both cities and provinces - they can be used together
     if (citiesParam) {
       const cities = citiesParam.split(",").map(c => c.trim()).filter(Boolean);
       setSelectedDistricts(cities);
-    } else if (provincesParam) {
+    }
+    if (provincesParam) {
       const provinces = provincesParam.split(",").map(p => p.trim()).filter(Boolean);
       setSelectedProvinces(provinces);
     }

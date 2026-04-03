@@ -138,7 +138,18 @@ async function fetchUserDoc(uid: string): Promise<any | null> {
       // Ensure other fields have safe defaults
       bio: data.bio || "",
       address: data.address || "",
-      availableServices: Array.isArray(data.availableServices) ? data.availableServices : [],
+      // Normalize services - check both `availableServices` and `services` field names
+      // SignupContext saves to `services`, EditProfile saves to `availableServices`
+      availableServices: Array.isArray(data.availableServices) 
+        ? data.availableServices 
+        : Array.isArray(data.services) 
+        ? data.services 
+        : [],
+      services: Array.isArray(data.services) 
+        ? data.services 
+        : Array.isArray(data.availableServices) 
+        ? data.availableServices 
+        : [],
       createdAt: toDateSafe(data.createdAt),
       updatedAt: toDateSafe(data.updatedAt),
     };
@@ -1111,25 +1122,36 @@ const AboutPanel = ({ providerData }: { providerData: any }) => (
         </p>
       </div>
     )}
-    {providerData?.availableServices &&
-      providerData.availableServices.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-gray-900 text-sm">Services Offered</h3>
-            <List className="w-5 h-5 text-gray-400" />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {providerData.availableServices.map((service: string, i: number) => (
-              <span
-                key={i}
-                className="px-2 py-1 bg-[#0072D1]/10 text-[#0072D1] text-xs rounded-full"
-              >
-                {service}
-              </span>
-            ))}
-          </div>
+    {(providerData?.availableServices?.length > 0 || providerData?.services?.length > 0) && (
+      <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold text-gray-900 text-sm">Services Offered</h3>
+          <List className="w-5 h-5 text-gray-400" />
         </div>
-      )}
+        <div className="flex flex-wrap gap-2">
+          {(providerData.availableServices || providerData.services || []).map((service: string, i: number) => (
+            <span
+              key={i}
+              className="px-2 py-1 bg-[#0072D1]/10 text-[#0072D1] text-xs rounded-full"
+            >
+              {service}
+            </span>
+          ))}
+        </div>
+      </div>
+    )}
+    <p className="text-xs font-bold text-gray-600 px-1">
+      Member since: {providerData?.createdAt ? (() => {
+        try {
+          const date = providerData.createdAt?.toDate?.() || 
+                      (providerData.createdAt?.seconds ? new Date(providerData.createdAt.seconds * 1000) : null) ||
+                      new Date(providerData.createdAt);
+          return isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        } catch {
+          return 'N/A';
+        }
+      })() : 'N/A'}
+    </p>
   </div>
 );
 
@@ -1382,7 +1404,15 @@ const PublicProfile: React.FC = () => {
         .join(" ") || "Unnamed Provider"
     : "";
 
-  const primaryService = providerData?.availableServices?.[0] || "";
+  // Get all services from both field names
+  const allServices = providerData?.availableServices || providerData?.services || [];
+  
+  // Format services display - show first service + count if multiple
+  const servicesDisplay = allServices.length > 0
+    ? allServices.length === 1
+      ? allServices[0]
+      : `${allServices[0]}${allServices.length > 2 ? ` +${allServices.length - 1} more` : ` & ${allServices[1]}`}`
+    : "Service Provider";
 
   const TABS: { key: ProfileTab; label: string }[] = [
     { key: "posts", label: "Posts" },
@@ -1582,9 +1612,9 @@ const PublicProfile: React.FC = () => {
                 <h2 className="text-xl font-black text-gray-900">
                   {providerName}
                 </h2>
-                {primaryService && (
+                {servicesDisplay && servicesDisplay !== "Service Provider" && (
                   <p className="text-base font-bold text-gray-600 mt-1">
-                    {primaryService}
+                    {servicesDisplay}
                   </p>
                 )}
               </>
@@ -1651,10 +1681,10 @@ const PublicProfile: React.FC = () => {
             <>
               <h2 className="text-base font-black text-gray-900 text-center">
                 {providerName}
-                {primaryService && (
+                {servicesDisplay && servicesDisplay !== "Service Provider" && (
                   <span className="font-normal text-gray-600">
                     {" "}
-                    · {primaryService}
+                    · {servicesDisplay}
                   </span>
                 )}
               </h2>
