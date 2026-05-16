@@ -35,6 +35,7 @@ import { db } from "../firebase";
 import AdminPostManagement from "./AdminPostManagement";
 import { notificationService } from "../services/notificationService";
 import AdminBookingsOverview from "./AdminBookingsOverview";
+import { slugify } from "../services/searchService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,8 @@ export interface UserProfile {
   email: string;
   role: string;
   displayName?: string;
+  firstName?: string;
+  lastName?: string;
   createdAt: Date;
   updatedAt: Date;
 }
