@@ -843,9 +843,15 @@ const UsersSection = ({
 }) => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const searchTerm = search.trim().toLowerCase();
   const filteredUsers = users
     .filter((u) => u.role === roleFilter)
-    .filter((u) => !search || (u.displayName || u.email || "").toLowerCase().includes(search.toLowerCase()));
+    .filter((u) => {
+      if (!searchTerm) return true;
+      const name = (u.displayName || `${(u as any).firstName || ""} ${(u as any).lastName || ""}`).toLowerCase();
+      const email = (u.email || "").toLowerCase();
+      return name.includes(searchTerm) || email.includes(searchTerm);
+    });
 
   const sectionLabel = roleFilter === "service_provider" ? "service-providers" : "customers";
   const sectionName  = roleFilter === "service_provider" ? "Service Provider" : "Customer";
@@ -900,7 +906,7 @@ const UsersSection = ({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={`Search ${roleFilter === "service_provider" ? "providers" : "seekers"}…`}
+              placeholder={`Search ${roleFilter === "service_provider" ? "providers by name or email" : "seekers by name or email"}…`}
               className="flex-1 max-w-xs px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-medium text-gray-700 outline-none focus:border-[#0072D1] transition-colors"
             />
             <p className="text-xs font-bold text-gray-400 hidden sm:block">{filteredUsers.length} found</p>
@@ -952,7 +958,10 @@ const UsersSection = ({
                           <td className="px-5 py-4">
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={() => navigate(`/public-profile/${u.uid}`)}
+                                onClick={() => {
+                                  const providerSlug = slugify(u.displayName || u.firstName || u.uid);
+                                  navigate(`/public-profile/${providerSlug}`);
+                                }}
                                 className="w-8 h-8 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center hover:bg-blue-100 transition-colors"
                                 title="View Profile"
                               >
@@ -1233,9 +1242,35 @@ const PostManagement = ({ posts }: { posts: Post[] }) => {
   return (
     <>
       <div className="space-y-5">
-        <div>
-          <h1 className="text-xl md:text-2xl font-black text-gray-900">Post Management</h1>
-          <p className="text-sm text-gray-400 font-medium mt-0.5">Overview and control of active service requests across the platform.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-xl md:text-2xl font-black text-gray-900">Post Management</h1>
+            <p className="text-sm text-gray-400 font-medium mt-0.5">Overview and control of active service requests across the platform.</p>
+          </div>
+          <MonthExportButton onExport={(year, month, monthLabel) => {
+            const monthPosts = posts.filter((p) => {
+              const d = toDateSafe(p.createdAt);
+              return d.getFullYear() === year && d.getMonth() === month;
+            });
+            if (monthPosts.length === 0) {
+              alert(`No posts found for ${monthLabel}.`);
+              return;
+            }
+
+            exportCSV(
+              `post-management-${year}-${String(month + 1).padStart(2, "0")}.csv`,
+              ["Post ID", "Title", "Category", "Provider", "Location", "Status", "Submitted"],
+              monthPosts.map((p) => [
+                [p.id],
+                [p.title || ""],
+                [p.category || ""],
+                [p.ownerName || ""],
+                [p.location || ""],
+                [p.status || ""],
+                [toDateSafe(p.createdAt).toLocaleDateString()],
+              ])
+            );
+          }} label="Export Report" />
         </div>
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex gap-0 border-b border-gray-100 overflow-x-auto px-2 scrollbar-hide">

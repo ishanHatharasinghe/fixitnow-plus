@@ -391,12 +391,14 @@ const SetupYourLocationPage = () => {
     district: string;
     division: string;
     postalCode: string;
+    street: string;
   }>({
     username: serviceProviderData.firstName || "",
     country: serviceProviderData.address?.country || "Sri Lanka",
     district: serviceProviderData.address?.state || "",
     division: serviceProviderData.address?.city || "",
-    postalCode: serviceProviderData.address?.postalCode || ""
+    postalCode: serviceProviderData.address?.postalCode || "",
+    street: serviceProviderData.address?.street || ""
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -460,7 +462,7 @@ const SetupYourLocationPage = () => {
       updateServiceProviderData({
         firstName: localData.username,
         address: {
-          street: serviceProviderData.address?.street || "",
+          street: localData.street,
           city: localData.division,
           state: localData.district,
           postalCode: localData.postalCode,
@@ -658,6 +660,20 @@ const SetupYourLocationPage = () => {
               {errors.postalCode && touched.postalCode && (
                 <p className="text-red-500 text-xs mt-1">{errors.postalCode}</p>
               )}
+            </div>
+
+            {/* Street Address */}
+            <div className="mb-6">
+              <label className="text-sm font-bold">Street Address</label>
+              <input
+                type="text"
+                name="street"
+                value={localData.street}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                className={getStyle("street")}
+                placeholder="Enter your street address"
+              />
             </div>
 
             {/* Buttons */}

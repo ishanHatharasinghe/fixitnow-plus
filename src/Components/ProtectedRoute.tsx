@@ -16,8 +16,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const { currentUser, loading } = useAuth();
   const location = useLocation();
 
-  // Show loading spinner while auth is being resolved
-  if (loading) {
+  // While auth state is being resolved, only block protected routes.
+  if (loading && requireAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">

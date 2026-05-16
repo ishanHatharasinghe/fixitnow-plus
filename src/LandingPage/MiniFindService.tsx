@@ -327,8 +327,8 @@ const ChooseCity = () => {
     <section className="relative w-full min-h-screen flex items-center justify-center font-sans py-16 px-4 md:px-8 overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 z-0">
-        <img src={bg} alt="Background" className="w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
+        <img src={bg} alt="Background" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-black/40" />
       </div>
 
       {/* Main content */}
@@ -467,7 +467,7 @@ const ChooseCity = () => {
               contributors
             </div>
             {(selectedCity || selectedProvince) && (
-              <div className="absolute top-3 left-3 right-3 flex items-center justify-between bg-white/95 backdrop-blur-sm rounded-xl px-3 py-2 shadow-lg">
+              <div className="absolute top-3 left-3 right-3 flex items-center justify-between bg-white/95 rounded-xl px-3 py-2 shadow-lg">
                 <span className="text-xs font-bold text-gray-700 truncate">
                   📍{" "}
                   {selectedCity
@@ -492,7 +492,7 @@ const ChooseCity = () => {
           </div>
 
           {/* RIGHT: Locations list */}
-          <div className="w-full md:w-[55%] lg:w-[60%] bg-white/90 backdrop-blur-md rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col">
+          <div className="w-full md:w-[55%] lg:w-[60%] bg-white/90 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col">
             {/* Desktop grid */}
             <div className="hidden md:grid grid-cols-3 gap-x-4 gap-y-6 flex-1">
               {locationData.map((loc, i) => (
@@ -631,7 +631,7 @@ const ChooseCity = () => {
       {isFilterOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/40"
             onClick={() => setIsFilterOpen(false)}
           />
           <div className="relative w-full md:w-[450px] bg-white h-full flex flex-col shadow-2xl overflow-hidden">

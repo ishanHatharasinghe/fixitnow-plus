@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
 
 interface UserProfile {
   uid: string;
@@ -45,64 +45,74 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user: User | null) => {
+    let unsubscribeProfile: Unsubscribe | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (user: User | null) => {
       setCurrentUser(user);
-      
+      setLoading(true);
+      setError(null);
+
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
+      }
+
       if (user) {
-        try {
-          // Check if user is admin based on email
-          const isAdmin = user.email === 'ishanhatharasinghe222@gmail.com';
-          
-          // Get user profile from Firestore
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data() as UserProfile;
-            // Normalize profile picture field - Firestore may store it as 'profilePicture'
-            // while Firebase Auth uses 'photoURL'. Map both to ensure consistency.
-            const profileImage = userData.profilePicture || userData.photoURL || user.photoURL || '';
-            setUserProfile({
-              ...userData,
-              photoURL: profileImage,
-              // Also set profilePicture for backward compatibility
-              profilePicture: profileImage as any,
-              createdAt: userData.createdAt ? new Date(userData.createdAt) : undefined,
-              updatedAt: userData.updatedAt ? new Date(userData.updatedAt) : undefined
-            });
-            // Admin email always wins — never let Firestore overwrite it
-            if (isAdmin) {
-              setUserRole('admin');
-            } else if (userData.role) {
-              setUserRole(userData.role);
+        const isAdmin = user.email === 'ishanhatharasinghe222@gmail.com';
+        const userRef = doc(db, 'users', user.uid);
+
+        unsubscribeProfile = onSnapshot(
+          userRef,
+          (snap) => {
+            if (snap.exists()) {
+              const userData = snap.data() as UserProfile;
+              const profileImage = userData.profilePicture || userData.photoURL || user.photoURL || '';
+              setUserProfile({
+                ...userData,
+                photoURL: profileImage,
+                profilePicture: profileImage as any,
+                createdAt: userData.createdAt ? new Date(userData.createdAt) : undefined,
+                updatedAt: userData.updatedAt ? new Date(userData.updatedAt) : undefined
+              });
+              if (isAdmin) {
+                setUserRole('admin');
+              } else if (userData.role) {
+                setUserRole(userData.role);
+              } else {
+                setUserRole('seeker');
+              }
             } else {
-              setUserRole('seeker');
+              const basicProfile: UserProfile = {
+                uid: user.uid,
+                email: user.email || '',
+                displayName: user.displayName || undefined,
+                photoURL: user.photoURL || undefined,
+                role: isAdmin ? 'admin' : 'seeker',
+                createdAt: new Date(),
+                updatedAt: new Date()
+              };
+              setUserProfile(basicProfile);
+              setUserRole(isAdmin ? 'admin' : 'seeker');
             }
-          } else {
-            // Create basic profile if it doesn't exist
-            const basicProfile: UserProfile = {
-              uid: user.uid,
-              email: user.email || '',
-              displayName: user.displayName || undefined,
-              photoURL: user.photoURL || undefined,
-              role: isAdmin ? 'admin' : 'seeker',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            };
-            setUserProfile(basicProfile);
-            setUserRole(isAdmin ? 'admin' : 'seeker');
+            setLoading(false);
+          },
+          (err) => {
+            console.error('Error listening to user profile:', err);
+            setError('Failed to load user profile');
+            setLoading(false);
           }
-        } catch (err) {
-          console.error('Error fetching user profile:', err);
-          setError('Failed to load user profile');
-        }
+        );
       } else {
         setUserProfile(null);
         setUserRole(null);
+        setLoading(false);
       }
-      
-      setLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
+    };
   }, []);
 
   const signOut = async () => {
@@ -129,7 +139,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };

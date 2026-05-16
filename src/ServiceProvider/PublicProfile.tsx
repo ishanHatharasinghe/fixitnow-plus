@@ -1219,7 +1219,6 @@ const PublicProfile: React.FC = () => {
   const { serviceProviderId } = useParams<{ serviceProviderId: string }>();
   const { currentUser, userRole, userProfile } = useAuth();
   const navigate = useNavigate();
-
   const [tab, setTab] = useState<ProfileTab>("posts");
   const [page, setPage] = useState(1);
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -1265,28 +1264,45 @@ const PublicProfile: React.FC = () => {
     setLoadingProvider(true);
     setProviderError(null);
     setProviderData(null);
-
-    // Use retry mechanism for more robust fetching
+    // Use retry mechanism for robust fetching. First try by doc id (uid).
     withRetry(() => fetchUserDoc(serviceProviderId))
-      .then((data) => {
-        if (!data) {
-          setProviderError("Service provider not found.");
+      .then(async (data) => {
+        if (data) {
+          setProviderData(data);
+          if (data.profilePicture) setProfileImageSrc(data.profilePicture);
+          else if (data.photoURL) setProfileImageSrc(data.photoURL);
+          if (data.coverImage) setCoverSrc(data.coverImage);
           return;
         }
 
-        setProviderData(data);
+        // If not found by uid, try common human-friendly fields (displayName, username, firstName, lastName)
+        const tryFindByField = async (field: string, value: string) => {
+          try {
+            const q = query(collection(db, "users"), where(field, "==", value));
+            const snap = await getDocs(q);
+            if (!snap.empty) return snap.docs[0].data();
+          } catch (err) {
+            console.warn(`[PublicProfile] query by ${field} failed:`, err);
+          }
+          return null;
+        };
 
-        // FIX: use normalized `profilePicture` field with fallback to `photoURL`
-        if (data.profilePicture) {
-          setProfileImageSrc(data.profilePicture);
-        } else if (data.photoURL) {
-          setProfileImageSrc(data.photoURL);
+        const decoded = decodeURIComponent(serviceProviderId).replace(/-/g, " ").trim();
+
+        // Try exact matches on a set of likely fields
+        const fieldsToTry = ["displayName", "username", "firstName", "lastName", "businessName", "email"];
+        for (const f of fieldsToTry) {
+          const found = await tryFindByField(f, decoded);
+          if (found) {
+            setProviderData({ ...found, uid: (found.uid || found.id) });
+            if (found.profilePicture) setProfileImageSrc(found.profilePicture);
+            else if (found.photoURL) setProfileImageSrc(found.photoURL);
+            if (found.coverImage) setCoverSrc(found.coverImage);
+            return;
+          }
         }
 
-        // Optional cover image
-        if (data.coverImage) {
-          setCoverSrc(data.coverImage);
-        }
+        setProviderError("Service provider not found.");
       })
       .catch((err) => {
         console.error("[PublicProfile] Provider fetch error after retries:", err);
@@ -1645,15 +1661,13 @@ const PublicProfile: React.FC = () => {
                 serviceProviderId={serviceProviderId || ''}
                 serviceProviderName={providerName}
               />
-              {userRole !== "service_provider" && (
-                <button
+              <button
                   onClick={() => setShowBookingModal(true)}
                   className="relative overflow-hidden flex items-center gap-1.5 bg-green-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all duration-300 hover:bg-green-700 hover:scale-105 group"
                 >
                   <span className="relative z-10">Book Now</span>
                   <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
                 </button>
-              )}
               <AddReviewBtn />
             </div>
           </div>
@@ -1687,14 +1701,12 @@ const PublicProfile: React.FC = () => {
                   serviceProviderName={providerName}
                   size="sm"
                 />
-                {userRole !== "service_provider" && (
-                  <button
+                <button
                     onClick={() => setShowBookingModal(true)}
                     className="text-xs px-3 py-2 rounded-lg bg-green-600 text-white font-bold hover:bg-green-700 transition-colors"
                   >
                     Book Now
                   </button>
-                )}
                 <AddReviewBtn small />
               </div>
             </>

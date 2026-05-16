@@ -166,10 +166,11 @@ const HomePage = () => {
       </div>
 
       {/* --- MAN IMAGE LAYER --- */}
-      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-full flex justify-center pointer-events-none">
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-full flex justify-center pointer-events-none" style={{ willChange: "transform" }}>
         <img
           src={man}
           alt="Service Man"
+          decoding="async"
           className="object-contain h-[70vh] md:h-[75vh] max-w-none origin-bottom"
         />
       </div>
@@ -189,7 +190,7 @@ const HomePage = () => {
         {/* BOTTOM UI SECTION */}
         <div className="w-full flex flex-col items-center mt-auto mb-4 md:mb-8 z-30">
           {/* SEARCH BAR ROW */}
-          <div className="w-full max-w-4xl flex items-center justify-between gap-2 p-2 rounded-xl md:rounded-full bg-white/50 backdrop-blur-md md:bg-white md:backdrop-blur-none shadow-lg">
+          <div className="w-full max-w-4xl flex items-center justify-between gap-2 p-2 rounded-xl md:rounded-full bg-white/80 md:bg-white shadow-lg">
             <div className="flex-1 flex items-center gap-2 bg-white rounded-lg md:rounded-full px-4 py-3 h-12 md:h-14">
               <Search className="w-5 h-5 text-gray-400 hidden md:block" />
               <input
@@ -275,6 +276,8 @@ const HomePage = () => {
               <img
                 src={Logo}
                 alt="FixItNow Logo"
+                loading="lazy"
+                decoding="async"
                 className="w-[70%] h-[70%] object-contain"
               />
             </div>
@@ -294,7 +297,7 @@ const HomePage = () => {
         <div className="fixed inset-0 z-50 flex justify-end">
           {/* Dark Overlay Background */}
           <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
+            className="absolute inset-0 bg-black/40 transition-opacity"
             onClick={() => setIsFilterOpen(false)}
           />
 

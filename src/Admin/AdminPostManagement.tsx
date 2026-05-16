@@ -24,6 +24,7 @@ import {
   Eye,
   Search,
   RefreshCw,
+  Download,
   MapPin,
   Calendar,
   User,
@@ -386,6 +387,52 @@ const AdminPostManagement: React.FC = () => {
     }
   };
 
+  const handleExport = () => {
+    if (filteredPosts.length === 0) {
+      alert("No posts available to export.");
+      return;
+    }
+
+    const headers = [
+      "Post ID",
+      "Title",
+      "Category",
+      "Location",
+      "Provider",
+      "Email",
+      "Mobile",
+      "Status",
+      "Created At",
+      "Description",
+    ];
+
+    const rows = filteredPosts.map((post) => [
+      post.id,
+      post.title,
+      post.category,
+      post.location,
+      post.ownerName,
+      post.email,
+      `+94 ${post.mobile}`,
+      post.status,
+      toDate(post.createdAt).toLocaleDateString(),
+      post.description || "",
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `fixitnow-posts-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // ── Filter ────────────────────────────────────────────────────────────────────
 
   const filteredPosts = posts.filter(post => {
@@ -418,14 +465,23 @@ const AdminPostManagement: React.FC = () => {
           <h2 className="text-xl font-black text-gray-900">Post Management</h2>
           <p className="text-sm text-gray-500 mt-0.5">Review and moderate service provider listings</p>
         </div>
-        <button
-          onClick={fetchPosts}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:border-[#0072D1] hover:text-[#0072D1] transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:border-[#0072D1] hover:text-[#0072D1] transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            Export
+          </button>
+          <button
+            onClick={fetchPosts}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:border-[#0072D1] hover:text-[#0072D1] transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Stat cards — click to filter */}

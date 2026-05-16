@@ -35,3 +35,19 @@ createRoot(document.getElementById("root")!).render(
     <Root />
   </StrictMode>
 );
+
+// Hide initial preloader once React has mounted
+// Using requestAnimationFrame to ensure this runs after render
+requestAnimationFrame(() => {
+  const initialPreloader = document.getElementById('initial-preloader');
+  if (initialPreloader) {
+    // Add a small delay to ensure smooth transition
+    setTimeout(() => {
+      initialPreloader.classList.add('hidden');
+      // Remove from DOM after transition completes
+      setTimeout(() => {
+        initialPreloader.remove();
+      }, 300);
+    }, 100);
+  }
+});

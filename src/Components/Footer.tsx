@@ -1,12 +1,14 @@
 import { Facebook, Twitter, Mail, Phone, Globe, ArrowUpRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../contexts/ToastContext";
 import { useRef, useEffect, useState } from "react";
 import emailjs from '@emailjs/browser';
 
 const Footer = () => {
   const navigate = useNavigate();
   const { currentUser, userRole, loading } = useAuth();
+  const { showToast } = useToast();
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [message, setMessage] = useState("");
   const footerRef = useRef<HTMLElement>(null);
@@ -15,7 +17,7 @@ const Footer = () => {
     if (loading) return;
     if (requiresAuth && !currentUser) { navigate("/select-role"); return; }
     if (requiresAuth && currentUser && userRole === "seeker") {
-      alert("Only service providers and administrators can access this feature.");
+      showToast("Only service providers and administrators can access this feature.", "warning");
       return;
     }
     navigate(path);
@@ -28,7 +30,7 @@ const Footer = () => {
     }
 
     if (!message.trim()) {
-      alert("Please enter a message.");
+      showToast("Please enter a message.", "warning");
       return;
     }
 
@@ -47,7 +49,7 @@ const Footer = () => {
       '2amLi4U06M6ljwSjQ'
     ).then(
       () => {
-        alert("Message sent successfully!");
+        showToast("Message sent successfully!", "success");
         setMessage("");
         const whatsappLink = `https://wa.me/94703052181?text=${encodeURIComponent(
           `Message from: ${currentUser.email}\n\n${message}`
@@ -56,7 +58,7 @@ const Footer = () => {
       },
       (error) => {
         console.error("EmailJS error:", error);
-        alert("Failed to send message. Please try again.");
+        showToast("Failed to send message. Please try again.", "error");
       }
     );
   };

@@ -59,6 +59,15 @@ function normalize(text?: string): string {
   return String(text).toLowerCase().trim();
 }
 
+export function slugify(text?: string): string {
+  if (!text) return "";
+  return String(text)
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9\-]/g, "");
+}
+
 function matchesQuery(text: string, query: string): boolean {
   const source = normalize(text);
   const normalizedQuery = normalize(query);
@@ -139,7 +148,28 @@ export const searchService = {
       });
     }
 
-    // 4) Posts from Firebase (if query is long enough)
+    // 4) Providers from Firebase (if query is long enough)
+    if (normalizedQuery.length >= 2) {
+      try {
+        const providers = await userService.searchServiceProviders(query, 3);
+        providers.forEach((provider) => {
+          const slug = provider.displayName ? slugify(provider.displayName) : provider.uid;
+          results.push({
+            id: `provider-${provider.uid}`,
+            type: "provider",
+            title: provider.displayName || provider.firstName || "Service Provider",
+            subtitle: provider.businessName ? `Provider • ${provider.businessName}` : "Service Provider",
+            description: provider.bio || (provider.availableServices ?? provider.services ?? []).slice(0, 3).join(", ") || "",
+            route: `/public-profile/${encodeURIComponent(slug)}`,
+            meta: provider.city || provider.country || "",
+          });
+        });
+      } catch (err) {
+        console.error("searchService: provider search failed", err);
+      }
+    }
+
+    // 5) Posts from Firebase (if query is long enough)
     if (normalizedQuery.length >= 2) {
       try {
         const posts = await postService.searchPosts(query);
@@ -159,7 +189,7 @@ export const searchService = {
       }
     }
 
-    // 5) FAQ suggestions (instant)
+    // 6) FAQ suggestions (instant)
     if (normalizedQuery.length >= 2) {
       const matchedFaqs = FAQ_ENTRIES.filter(faq =>
         matchesQuery(`${faq.question} ${faq.answer} ${faq.category}`, query)

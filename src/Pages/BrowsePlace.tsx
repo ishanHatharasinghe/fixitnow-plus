@@ -12,6 +12,7 @@ import {
   ChevronRight,
   List
 } from "lucide-react";
+import { useAuth } from "../hooks/useAuth";
 
 import SampleImg from "../assets/AboutSection/img1.webp";
 import { postService } from "../services/postService";
@@ -101,149 +102,227 @@ const FullDetailsModal = ({
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
+    return () => { document.body.style.overflow = ""; };
   }, []);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
   const details = [
-    { label: "Post Title", value: card.title || "Not specified" },
-    { label: "Service Category", value: card.category || "Not specified" },
-    { label: "Specializations", value: card.specializations || "Not specified" },
-    { label: "Province / Location", value: card.location || "Not specified" },
-    { label: "Specific Cities", value: card.specificCities || "Not specified" },
-    { label: "Maximum Travel Distance", value: card.travelDistance || "Not specified" },
-    { label: "Pricing Model", value: card.pricingModel || "Not specified" },
-    { label: "Description", value: card.description || "Not specified" },
-    { label: "Keywords", value: card.keywords || "Not specified" },
-    { label: "Included Services Checklist", value: Array.isArray(card.checklist) ? card.checklist.join(", ") : (card.includedServices || "Not specified") },
-    { label: "Client-Provided Materials Required", value: card.clientMaterials || "Not specified" },
-    { label: "Available Days", value: Array.isArray(card.availableDays) ? card.availableDays.join(", ") : (card.availableDays || "Not specified") },
-    { label: "Available Hours", value: card.timeFromHour ? `${card.timeFromHour}:00 ${card.timeFromAmPm} – ${card.timeToHour}:00 ${card.timeToAmPm}` : (card.availableHours || "Not specified") },
-    { label: "Starting Price (LKR)", value: card.startingPrice ? `LKR ${Number(card.startingPrice).toLocaleString()}` : "Not specified" },
-    { label: "Inspection Fee (LKR)", value: card.inspectionFee ? `LKR ${Number(card.inspectionFee).toLocaleString()}` : "Not specified" },
-    { label: "Emergency Availability", value: card.emergency || "Not specified" },
-    { label: "Owner Information", value: card.ownerName || "Not specified" },
-    { label: "Email Address", value: card.email || "Not specified" },
-    { label: "Address", value: card.ownerAddress || "Not specified" },
-    { label: "NIC Number", value: card.nic || "Not specified" },
-    { label: "Mobile Number", value: card.mobile || "Not specified" }
+    { label: "Post Title",                value: card.title || "Not specified" },
+    { label: "Service Category",          value: card.category || "Not specified" },
+    { label: "Specializations",           value: card.specializations || "Not specified" },
+    { label: "Province / Location",       value: card.location || "Not specified" },
+    { label: "Specific Cities",           value: card.specificCities || "Not specified" },
+    { label: "Max Travel Distance",       value: card.travelDistance || "Not specified" },
+    { label: "Pricing Model",             value: card.pricingModel || "Not specified" },
+    { label: "Starting Price",            value: card.startingPrice ? `LKR ${Number(card.startingPrice).toLocaleString()}` : "Not specified" },
+    { label: "Inspection Fee",            value: card.inspectionFee ? `LKR ${Number(card.inspectionFee).toLocaleString()}` : "Not specified" },
+    { label: "Available Days",            value: Array.isArray(card.availableDays) ? card.availableDays.join(", ") : (card.availableDays || "Not specified") },
+    { label: "Available Hours",           value: card.timeFromHour ? `${card.timeFromHour}:00 ${card.timeFromAmPm} – ${card.timeToHour}:00 ${card.timeToAmPm}` : (card.availableHours || "Not specified") },
+    { label: "Emergency Service",         value: card.emergency || "Not specified", isEmergency: true },
+    { label: "Included Services",         value: Array.isArray(card.checklist) ? card.checklist.join(", ") : (card.includedServices || "Not specified") },
+    { label: "Client Materials Required", value: card.clientMaterials || "Not specified" },
+    { label: "Owner Name",                value: card.ownerName || "Not specified" },
+    { label: "NIC Number",                value: card.nic || "Not specified" },
+    { label: "Address",                   value: card.ownerAddress || "Not specified" },
   ];
 
+  const images = card.images && card.images.length > 0 ? card.images : [SampleImg];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8">
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-[#0072D1]/30 overflow-hidden max-h-[90vh] flex flex-col">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-gray-100 hover:bg-red-100 hover:text-red-500 flex items-center justify-center transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
-        <div className="overflow-y-auto flex-1 p-6 md:p-8">
-          <h2 className="font-black text-gray-900 text-xl md:text-2xl leading-tight mb-1 pr-8">
-            {card.title}
-          </h2>
-          <div className="flex items-center gap-1.5 text-gray-400 mb-5">
-            <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
-            <span className="text-sm font-medium">{card.location}</span>
+      <div className="relative w-full max-w-4xl bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+
+        {/* Accent bar */}
+        <div className="h-[4px] bg-gradient-to-r from-[#0072D1] to-[#FF5A00] flex-shrink-0" />
+
+        {/* Header */}
+        <div className="flex items-start gap-3 px-5 py-4 border-b border-gray-100 flex-shrink-0">
+          <div className="flex-1 min-w-0">
+            <h2 className="font-black text-gray-900 text-base md:text-lg leading-snug">
+              {card.title}
+            </h2>
+            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+              <span className="flex items-center gap-1.5 text-[11px] text-gray-400 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#FF5A00]" />
+                {card.location}
+              </span>
+              {card.category && (
+                <span className="bg-blue-50 text-[#0072D1] text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                  {card.category}
+                </span>
+              )}
+              {card.startingPrice && (
+                <span className="bg-orange-50 text-[#FF5A00] text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                  From LKR {Number(card.startingPrice).toLocaleString()}
+                </span>
+              )}
+            </div>
           </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="w-8 h-8 rounded-[8px] border-[1.5px] border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:border-[#FF5A00] hover:text-[#FF5A00] hover:bg-orange-50 transition-all flex-shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
-          <div className="flex flex-col md:flex-row gap-6 md:gap-8">
-            <div className="w-full md:w-[52%] flex-shrink-0">
-              <div className="relative rounded-2xl overflow-hidden bg-gray-100">
-                {card.images && card.images.length > 0 ? (
-                  <>
-                    <img
-                      src={card.images[activeImg]}
-                      alt={card.title}
-                      className="w-full h-56 md:h-[360px] object-cover"
+        {/* Body */}
+        <div className="flex flex-col md:flex-row flex-1 overflow-hidden min-h-0">
+
+          {/* ── Left column ── */}
+          <div className="w-full md:w-[260px] flex-shrink-0 border-b md:border-b-0 md:border-r border-gray-100 flex flex-col overflow-hidden">
+
+            {/* Hero image */}
+            <div className="relative h-[220px] flex-shrink-0 bg-black overflow-hidden">
+              <img
+                src={images[activeImg]}
+                alt={card.title}
+                className="w-full h-full object-cover opacity-95 transition-opacity duration-300"
+              />
+              {/* Gradient overlay */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+
+              {/* Dot nav */}
+              {images.length > 1 && (
+                <div className="absolute bottom-2.5 left-3 flex gap-1.5">
+                  {images.map((_: any, i: number) => (
+                    <button
+                      key={i}
+                      onClick={() => setActiveImg(i)}
+                      className={`rounded-full transition-all duration-200 ${
+                        i === activeImg
+                          ? "bg-[#FF5A00] w-3.5 h-2"
+                          : "bg-white/40 w-2 h-2 hover:bg-white/70"
+                      }`}
                     />
-                    {card.images.length > 1 && (
-                      <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
-                        {card.images.map((_: any, i: number) => (
-                          <button
-                            key={i}
-                            onClick={() => setActiveImg(i)}
-                            className={`rounded-full transition-all duration-200 ${
-                              i === activeImg
-                                ? "bg-[#0072D1] w-5 h-2.5"
-                                : "bg-gray-400/70 w-2.5 h-2.5 hover:bg-gray-600"
-                            }`}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="w-full h-56 md:h-[360px] flex items-center justify-center">
-                    <span className="text-sm text-gray-400">No images uploaded</span>
+                  ))}
+                </div>
+              )}
+
+              {/* Counter */}
+              {images.length > 1 && (
+                <div className="absolute bottom-2.5 right-3 bg-black/55 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  {activeImg + 1} / {images.length}
+                </div>
+              )}
+            </div>
+
+            {/* Thumbnails — only if multiple images */}
+            {images.length > 1 && (
+              <div className="flex gap-1.5 px-2.5 py-2 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
+                {images.map((src: string, i: number) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveImg(i)}
+                    className={`w-11 h-9 rounded-lg overflow-hidden flex-shrink-0 border-2 transition-all duration-150 ${
+                      i === activeImg ? "border-[#FF5A00]" : "border-transparent opacity-60 hover:opacity-100"
+                    }`}
+                  >
+                    <img src={src} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Description + Contact */}
+            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5">
+              <div className="bg-gray-50 rounded-xl p-3">
+                <p className="text-[10px] font-bold text-[#0072D1] uppercase tracking-wider mb-1.5">
+                  Description
+                </p>
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  {card.description || "Not specified"}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3 flex flex-col gap-2">
+                <p className="text-[10px] font-bold text-[#0072D1] uppercase tracking-wider">
+                  Contact
+                </p>
+                <div className="flex items-center gap-2 text-[11px] text-gray-600 font-medium">
+                  <span className="w-[22px] h-[22px] rounded-md bg-blue-100 flex items-center justify-center flex-shrink-0">
+                    <Phone className="w-3 h-3 text-[#0072D1]" />
+                  </span>
+                  +94 {card.mobile || card.phone || "—"}
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-gray-600 font-medium">
+                  <span className="w-[22px] h-[22px] rounded-md bg-orange-100 flex items-center justify-center flex-shrink-0">
+                    <Mail className="w-3 h-3 text-[#FF5A00]" />
+                  </span>
+                  {card.email || "—"}
+                </div>
+                {card.ownerAddress && (
+                  <div className="flex items-center gap-2 text-[11px] text-gray-600 font-medium">
+                    <span className="w-[22px] h-[22px] rounded-md bg-gray-100 flex items-center justify-center flex-shrink-0">
+                      <MapPin className="w-3 h-3 text-gray-400" />
+                    </span>
+                    {card.ownerAddress}
                   </div>
                 )}
               </div>
-
-              <div className="mt-5">
-                <div className="flex items-center gap-2 mb-2">
-                  <List className="w-4 h-4 text-gray-600" />
-                  <h3 className="font-black text-gray-800 text-base">Details</h3>
-                </div>
-                <p className="text-sm text-gray-600 leading-relaxed">
-                  {card.description}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <div className="space-y-3">
-                {details.map(({ label, value }) => (
-                  <div key={label} className="flex flex-col gap-0.5">
-                    <p className="text-sm text-gray-900 leading-snug">
-                      <span className="font-black">{label}: </span>
-                      <span className="font-normal text-gray-700">{value}</span>
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 pt-5 border-t border-gray-100">
-                <div className="flex flex-wrap items-center gap-5 mb-4">
-                  <span className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
-                    <Phone className="w-3.5 h-3.5 text-gray-400" />
-                    +94 {card.mobile || card.phone || "—"}
-                  </span>
-                  <span className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
-                    <Mail className="w-3.5 h-3.5 text-gray-400" />
-                    {card.email || "—"}
-                  </span>
-                </div>
-                <div className="flex justify-end">
-                  <button
-                    onClick={() => {
-                      if (card.serviceProviderId) {
-                        onNavigateToProvider(card.serviceProviderId);
-                        onClose();
-                      }
-                    }}
-                    className="text-[#FF5A00] font-bold text-sm hover:text-black transition-colors"
-                  >
-                    View Service Owner →
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
+
+          {/* ── Right column — details grid ── */}
+          <div className="flex-1 min-w-0 overflow-y-auto p-4">
+            <p className="text-[10px] font-bold text-[#0072D1] uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <List className="w-3 h-3" />
+              Service Details
+            </p>
+            <div className="flex flex-col divide-y divide-gray-50">
+              {details.map(({ label, value, isEmergency }: any) => (
+                <div key={label} className="flex gap-3 py-2">
+                  <span className="text-[11px] font-bold text-gray-400 w-[140px] flex-shrink-0 leading-snug pt-px">
+                    {label}
+                  </span>
+                  {isEmergency ? (
+                    <span className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700">
+                      <span className={`w-1.5 h-1.5 rounded-full ${value === "Yes" ? "bg-green-500" : "bg-gray-300"}`} />
+                      {value}
+                    </span>
+                  ) : label === "Starting Price" || label === "Inspection Fee" ? (
+                    <span className="text-[11px] font-bold text-[#0072D1]">{value}</span>
+                  ) : (
+                    <span className="text-[11px] text-gray-700 font-medium leading-snug">{value}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/60 flex-shrink-0">
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1.5 text-[11px] text-gray-500 font-medium">
+              <Phone className="w-3.5 h-3.5 text-[#0072D1]" />
+              +94 {card.mobile || card.phone || "—"}
+            </span>
+            <span className="flex items-center gap-1.5 text-[11px] text-gray-500 font-medium">
+              <Mail className="w-3.5 h-3.5 text-[#FF5A00]" />
+              {card.email || "—"}
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              if (card.serviceProviderId) {
+                onNavigateToProvider(card.serviceProviderId);
+                onClose();
+              }
+            }}
+            className="flex items-center gap-2 bg-[#FF5A00] hover:bg-[#0072D1] text-white font-bold text-xs py-2.5 px-4 rounded-[10px] transition-colors duration-200"
+          >
+            View Service Owner
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
     </div>
@@ -254,50 +333,113 @@ const FullDetailsModal = ({
 
 const ServiceCard = ({
   card,
-  onViewDetails
+  onViewDetails,
+  isLoggedIn,
+  onLoginClick,
 }: {
   card: any;
   onViewDetails: (card: any) => void;
+  isLoggedIn: boolean;
+  onLoginClick: () => void;
 }) => (
-  <div className="bg-white rounded-2xl overflow-hidden shadow-md border border-gray-100 flex flex-col transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-    <div className="w-full h-48 md:h-52 overflow-hidden flex-shrink-0">
+  <div className="bg-white rounded-[18px] overflow-hidden border border-gray-100 flex flex-col transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+
+    {/* Top accent bar */}
+    <div className="h-[3px] bg-gradient-to-r from-[#0072D1] to-[#FF5A00] flex-shrink-0" />
+
+    {/* Image */}
+    <div className="relative h-48 overflow-hidden flex-shrink-0">
       <img
         src={card.img}
         alt={card.title}
         className="w-full h-full object-cover"
       />
+      {/* Dark overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent" />
+
+      {/* Category badge */}
+      {card.category && (
+        <span className="absolute top-3 left-3 bg-[#FF5A00] text-white text-[11px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wide">
+          {card.category}
+        </span>
+      )}
+
+      {/* Price tag */}
+      {card.startingPrice && (
+        <div className="absolute bottom-3 right-3 bg-white/95 rounded-lg px-2.5 py-1 flex flex-col items-end">
+          <span className="text-[10px] text-gray-400 font-medium leading-none">Starting from</span>
+          <span className="text-sm font-black text-[#0072D1] leading-snug">
+            LKR {Number(card.startingPrice).toLocaleString()}
+          </span>
+        </div>
+      )}
     </div>
 
-    <div className="p-4 flex flex-col gap-2 flex-1">
-      <div className="flex items-center gap-1 text-gray-400">
-        <MapPin className="w-3 h-3 flex-shrink-0" />
-        <span className="text-xs">{card.location}</span>
+    {/* Body */}
+    <div className="p-4 flex flex-col gap-2.5 flex-1">
+
+      {/* Location + availability */}
+      <div className="flex items-center gap-1.5">
+        <div className="w-2 h-2 rounded-full bg-[#FF5A00] flex-shrink-0" />
+        <span className="text-[11px] text-gray-400 font-medium">{card.location}</span>
+        <span className="ml-auto inline-flex items-center gap-1 bg-blue-50 text-[#0072D1] text-[10px] font-bold px-2 py-0.5 rounded-full">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#0072D1]" />
+          Available
+        </span>
       </div>
-      <h3 className="font-bold text-gray-900 text-base leading-snug">
+
+      {/* Title */}
+      <h3 className="font-black text-gray-900 text-[15px] leading-snug">
         {card.title}
       </h3>
-      <p className="text-gray-500 text-xs leading-relaxed flex-1">
+
+      {/* Description */}
+      <p className="text-gray-400 text-xs leading-relaxed flex-1 line-clamp-3">
         {card.description}
       </p>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
-        <div className="flex items-center gap-1 text-gray-600">
-          <Phone className="w-3 h-3 flex-shrink-0" />
-          <span className="text-xs font-medium">{card.phone || card.mobile}</span>
+
+      {/* Divider */}
+      <div className="border-t border-gray-100" />
+
+      {/* Contact info */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2 text-[11px] text-gray-500 font-medium">
+          <span className="w-[22px] h-[22px] rounded-md bg-blue-50 flex items-center justify-center flex-shrink-0">
+            <Phone className="w-3 h-3 text-[#0072D1]" />
+          </span>
+          +94 {card.phone || card.mobile}
         </div>
-        <div className="flex items-center gap-1 text-gray-600">
-          <Mail className="w-3 h-3 flex-shrink-0" />
-          <span className="text-xs font-medium">{card.email}</span>
+        <div className="flex items-center gap-2 text-[11px] text-gray-500 font-medium">
+          <span className="w-[22px] h-[22px] rounded-md bg-orange-50 flex items-center justify-center flex-shrink-0">
+            <Mail className="w-3 h-3 text-[#FF5A00]" />
+          </span>
+          {card.email}
         </div>
       </div>
-      <div className="flex items-center gap-3 mt-2">
-        <button
-          onClick={() => onViewDetails(card)}
-          className="relative overflow-hidden flex-1 bg-[#FF5A00] text-white font-bold text-xs py-2.5 px-4 rounded-lg transition-all duration-300 hover:bg-black hover:scale-[1.02] group"
-        >
-          <span className="relative z-10">View Full Details</span>
-          <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-        </button>
-      </div>
+
+      {/* CTA */}
+      {isLoggedIn ? (
+        <div className="flex items-center gap-2 mt-1">
+          <button
+            onClick={() => onViewDetails(card)}
+            className="flex-1 bg-[#FF5A00] text-white font-bold text-xs py-2.5 px-4 rounded-[10px] transition-all duration-300 hover:bg-black hover:scale-[1.02]"
+          >
+            View Full Details
+          </button>
+          
+        </div>
+      ) : (
+        <div className="w-full bg-orange-50 border border-orange-200 rounded-xl p-3 text-center mt-1">
+          <p className="text-[#FF5A00] font-bold text-xs mb-0.5">Please log in first</p>
+          <p className="text-gray-400 text-[11px]">Log in to view full service details.</p>
+          <button
+            onClick={onLoginClick}
+            className="mt-2.5 bg-[#FF5A00] text-white font-bold text-xs py-2 px-5 rounded-lg transition-all duration-300 hover:bg-black"
+          >
+            Login
+          </button>
+        </div>
+      )}
     </div>
   </div>
 );
@@ -560,6 +702,8 @@ const ITEMS_PER_PAGE = 6;
 
 const BrowsePlace = () => {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
+  const isLoggedIn = Boolean(currentUser);
   // ✅ FIX 1: Use React Router's useLocation() — not window.location
   const routerLocation = useLocation();
 
@@ -844,13 +988,23 @@ const BrowsePlace = () => {
     images: post.images && post.images.length > 0 ? post.images : [SampleImg]
   });
 
+  const handleViewDetails = (card: any) => {
+    if (!isLoggedIn) {
+      navigate("/selectrole", {
+        state: { from: routerLocation.pathname + routerLocation.search },
+      });
+      return;
+    }
+    setSelectedCard(card);
+  };
+
   return (
     <div className="w-full min-h-screen bg-gray-50 font-sans">
       {/* ── Page Title ── */}
       <div className="w-full bg-white pt-8 pb-6 px-4 md:px-8 text-center">
         <h1 className="font-rostex text-3xl md:text-[80px] uppercase tracking-wide leading-tight">
           <span className="text-[#0072D1]">BROWSE</span>
-          <span className="text-[#FF5A00]">PLACE</span>
+          <span className="text-[#FF5A00]">SERVICE</span>
         </h1>
       </div>
 
@@ -969,7 +1123,11 @@ const BrowsePlace = () => {
                   <ServiceCard
                     key={post.id}
                     card={normalizeCard(post)}
-                    onViewDetails={setSelectedCard}
+                    onViewDetails={handleViewDetails}
+                    isLoggedIn={isLoggedIn}
+                    onLoginClick={() => navigate("/selectrole", {
+                      state: { from: routerLocation.pathname + routerLocation.search }
+                    })}
                   />
                 ))}
               </div>
@@ -978,7 +1136,11 @@ const BrowsePlace = () => {
                   <ServiceCard
                     key={post.id}
                     card={normalizeCard(post)}
-                    onViewDetails={setSelectedCard}
+                    onViewDetails={handleViewDetails}
+                    isLoggedIn={isLoggedIn}
+                    onLoginClick={() => navigate("/selectrole", {
+                      state: { from: routerLocation.pathname + routerLocation.search }
+                    })}
                   />
                 ))}
               </div>

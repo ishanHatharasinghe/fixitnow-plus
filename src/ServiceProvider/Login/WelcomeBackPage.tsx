@@ -27,9 +27,9 @@ const WelcomeBackPage = () => {
       if (userRole === 'admin') {
         navigate('/admin/dashboard');
       } else if (userRole === 'service_provider') {
-        navigate('/service-provider/profile');
+        navigate('/');
       } else {
-        navigate('/seeker/dashboard');
+        navigate('/');
       }
     } catch (err: any) {
       console.error('Login error:', err);

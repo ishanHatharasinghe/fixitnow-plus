@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { SignupProvider } from "./contexts/SignupContext";
 import { MessagingProvider } from "./contexts/MessagingContext";
+import { ToastProvider } from "./contexts/ToastContext";
 import ProtectedRoute from "./Components/ProtectedRoute";
 import RoleBasedRoute from "./Components/RoleBasedRoute";
 import NavBar from "./Components/NavBar";
@@ -35,6 +36,16 @@ const SeekerDashboard = () => {
 };
 const ServiceProviderDashboard = () => <div>Service Provider Dashboard</div>;
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [pathname]);
+
+  return null;
+}
+
 function App() {
   const [showPreloader, setShowPreloader] = useState(true);
 
@@ -53,8 +64,10 @@ function App() {
     <AuthProvider>
       <MessagingProvider>
         <SignupProvider>
-          <div className="App min-h-screen flex flex-col">
-            <NavBar />
+          <ToastProvider>
+            <ScrollToTop />
+            <div className="App min-h-screen flex flex-col">
+              <NavBar />
             <main className="flex-1">
               <Routes>
 
@@ -248,6 +261,7 @@ function App() {
 
           </Routes>          </main>
           <Footer />        </div>
+          </ToastProvider>
       </SignupProvider>
       </MessagingProvider>
     </AuthProvider>

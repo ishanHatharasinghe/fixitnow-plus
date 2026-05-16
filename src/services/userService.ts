@@ -246,6 +246,58 @@ export const userService = {
     });
   },
 
+  async searchServiceProviders(queryText: string, maxResults = 6): Promise<UserProfile[]> {
+    const normalizedQuery = String(queryText).toLowerCase().trim();
+    if (!normalizedQuery) return [];
+
+    const q = query(usersCollection, where('role', '==', 'service_provider'));
+    const querySnapshot = await getDocs(q);
+
+    const providers = querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        ...data,
+        uid: doc.id,
+        createdAt: data.createdAt?.toDate?.() ?? new Date(),
+        updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
+        displayName: data.displayName || data.firstName || '',
+        firstName: data.firstName || data.displayName || '',
+        lastName: data.lastName || '',
+        availableServices: data.availableServices ?? data.services ?? [],
+        services: data.services ?? data.availableServices ?? [],
+      } as UserProfile;
+    });
+
+    const scored = providers
+      .map((provider) => {
+        const searchable = [
+          provider.displayName,
+          provider.firstName,
+          provider.lastName,
+          provider.businessName,
+          provider.bio,
+          provider.city,
+          provider.country,
+          ...(provider.availableServices ?? []),
+          ...(provider.services ?? []),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        const score = searchable.includes(normalizedQuery) ?
+          (searchable.startsWith(normalizedQuery) ? 3 : 1) : 0;
+
+        return { provider, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxResults)
+      .map((item) => item.provider);
+
+    return scored;
+  },
+
   // Check if user exists
   async userExists(uid: string): Promise<boolean> {
     const userRef = doc(usersCollection, uid);

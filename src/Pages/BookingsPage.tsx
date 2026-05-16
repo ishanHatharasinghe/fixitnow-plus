@@ -4,7 +4,9 @@ import { useAuth } from "../contexts/AuthContext";
 import { useMessaging } from "../contexts/MessagingContext";
 import { bookingService, type Booking } from "../services/bookingService";
 import { notificationService } from "../services/notificationService";
+import { useToast } from "../contexts/ToastContext";
 import { userService } from "../services/userService";
+import { slugify } from "../services/searchService";
 import { db } from "../firebase";
 import { collection, getDocs, query, where, doc, getDoc } from "firebase/firestore";
 import { MessageSquare, User } from "lucide-react";
@@ -228,10 +230,12 @@ const BookingsPage: React.FC = () => {
     openCancelModal(booking, "provider_cancel");
   };
 
+  const { showToast } = useToast();
+
   const handleComplete = async (booking: Booking) => {
     const now = new Date();
     if (booking.bookingDate > now) {
-      alert("You can only mark completed on or after the booked date.");
+      showToast("You can only mark completed on or after the booked date.", "warning");
       return;
     }
     await updateStatus(booking, "completed");
@@ -326,7 +330,14 @@ const BookingsPage: React.FC = () => {
         {/* Navigation Buttons */}
         <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-3">
           <button
-            onClick={() => navigate(`/public-profile/${roleContext === "customer" ? booking.providerId : booking.customerId}`)}
+            onClick={() => {
+              const targetId = roleContext === "customer" ? booking.providerId : booking.customerId;
+              const displayName = roleContext === "customer"
+                ? providerNames[booking.providerId]
+                : customerNames[booking.customerId];
+              const profileSlug = displayName ? slugify(displayName) : targetId;
+              navigate(`/public-profile/${profileSlug}`);
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0072D1] text-white text-xs font-semibold hover:bg-[#005baa] transition-colors"
           >
             <User className="w-3.5 h-3.5" />
@@ -347,7 +358,7 @@ const BookingsPage: React.FC = () => {
                 }
               } catch (err) {
                 console.error("Failed to start conversation", err);
-                alert("Failed to open message. Please try again.");
+                showToast("Failed to open message. Please try again.", "error");
               }
             }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 transition-colors"

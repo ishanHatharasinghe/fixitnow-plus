@@ -160,7 +160,7 @@ const SetupYourAccountPage = () => {
       // Save data to context and navigate to next step
       updateServiceProviderData({
         firstName: localData.username,
-        lastName: localData.description,
+        bio: localData.description,
         phoneNumber: localData.phone,
         services: selectedServices
       });

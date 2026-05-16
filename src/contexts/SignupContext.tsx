@@ -12,6 +12,7 @@ interface ServiceProviderData {
   firstName: string;
   lastName: string;
   phoneNumber: string;
+  bio?: string;
   userType: 'individual' | 'business' | 'boarding_owner';
   businessName?: string;
   businessRegistrationNumber?: string;
@@ -352,6 +353,7 @@ export const SignupProvider: React.FC<SignupProviderProps> = ({ children }) => {
         firstName: firstName,
         lastName: lastName,
         phoneNumber: phoneNumber,
+        bio: serviceProviderData.bio || '',
         role: 'service_provider',
         userType: finalData.userType,
         businessName: finalData.userType === 'business' ? businessName : null,

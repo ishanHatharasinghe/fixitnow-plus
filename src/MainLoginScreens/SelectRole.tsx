@@ -44,7 +44,7 @@ const RoleSelect: React.FC = () => {
       }
 
       // Navigate to seeker dashboard or home
-      navigate("/seeker/dashboard");
+      navigate("/");
     } catch (err: any) {
       console.error("Error signing in with Google:", err);
       if (err.code === 'auth/popup-closed-by-user') {

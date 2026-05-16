@@ -119,6 +119,8 @@ const About = () => {
           <img
             src={MainImage}
             alt="Service Professional"
+            loading="lazy"
+            decoding="async"
             className="w-full h-auto object-cover rounded-[2.5rem] shadow-xl"
           />
         </div>
@@ -137,6 +139,8 @@ const About = () => {
               <img
                 src={card.img}
                 alt={card.title}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover"
               />
             </div>

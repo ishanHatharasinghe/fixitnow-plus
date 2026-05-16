@@ -51,7 +51,7 @@ const Navbar: React.FC = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser, userProfile, userRole, signOut } = useAuth();
+  const { currentUser, userProfile, userRole, signOut, loading } = useAuth();
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const profileButtonRef = useRef<HTMLButtonElement>(null);
@@ -1092,13 +1092,17 @@ const Navbar: React.FC = () => {
                     )}
                   </div>
                 ) : (
-                  <button
-                    className="relative overflow-hidden bg-gray-900 text-white px-5 py-2 rounded-lg font-semibold text-sm shadow-sm transition-all duration-300 hover:bg-[#0072D1] hover:shadow-md active:scale-95 group"
-                    onClick={() => navigate("/selectrole")}
-                  >
-                    <span className="relative z-10">Login</span>
-                    <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-                  </button>
+                  loading ? (
+                    <div className="w-28 h-10 bg-gray-200 rounded-lg animate-pulse" aria-hidden="true" />
+                  ) : (
+                    <button
+                      className="relative overflow-hidden bg-gray-900 text-white px-5 py-2 rounded-lg font-semibold text-sm shadow-sm transition-all duration-300 hover:bg-[#0072D1] hover:shadow-md active:scale-95 group"
+                      onClick={() => navigate("/selectrole")}
+                    >
+                      <span className="relative z-10">Login</span>
+                      <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                    </button>
+                  )
                 )}
               </div>
             </div>
