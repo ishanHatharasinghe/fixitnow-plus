@@ -160,7 +160,7 @@ export const searchService = {
             title: provider.displayName || provider.firstName || "Service Provider",
             subtitle: provider.businessName ? `Provider • ${provider.businessName}` : "Service Provider",
             description: provider.bio || (provider.availableServices ?? provider.services ?? []).slice(0, 3).join(", ") || "",
-            route: `/public-profile/${encodeURIComponent(slug)}`,
+            route: `/public-profile/${provider.uid}`,
             meta: provider.city || provider.country || "",
           });
         });
